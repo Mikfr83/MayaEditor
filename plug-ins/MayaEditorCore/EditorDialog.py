@@ -138,10 +138,11 @@ class EditorDialogCore(QDialog):
         except:
             pass
         self.settings.beginGroup("Font")
-        name = self.settings.value("font-name", type=str)
-        size = self.settings.value("font-size", type=int)
-        weight = self.settings.value("font-weight", type=int)
-        italic = self.settings.value("font-italic", type=bool)
+        name = str(self.settings.value("font-name", "Courier New") or "Courier New")
+        size = int(self.settings.value("font-size", 12) or 12)
+        weight = int(self.settings.value("font-weight", 50) or 50)  # 50 == QFont::Normal
+        _italic = self.settings.value("font-italic", False)
+        italic = _italic in (True, "true", "True", "1", 1)
         self.settings.endGroup()
 
         self.font = QFont(name, size, weight, italic)
@@ -281,7 +282,7 @@ class EditorDialogCore(QDialog):
         )
         show_output_window_action.setCheckable(True)
         show_output_window_action.setChecked(True)
-        show_output_window_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_1))
+        show_output_window_action.setShortcut(QKeySequence(Qt.KeyboardModifier.ControlModifier | Qt.Key_1))
 
         # show sidebar window
         show_sidebar_action = QAction("Show Sidebar", self)
@@ -292,7 +293,7 @@ class EditorDialogCore(QDialog):
         show_sidebar_action.setCheckable(True)
         show_sidebar_action.setChecked(True)
 
-        show_sidebar_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_0))
+        show_sidebar_action.setShortcut(QKeySequence(Qt.KeyboardModifier.ControlModifier | Qt.Key_0))
 
         # Menu to main menu bar
         self.menu_bar.addMenu(settings_menu)
@@ -682,6 +683,36 @@ class EditorDialog(MayaQWidgetDockableMixin,EditorDialogCore):
         EditorDialogCore.__init__(self)
 
 class EditorDialogStandalone(EditorDialogCore):
-    def __init__(self) :
+    def __init__(self):
         EditorDialogCore.__init__(self)
+
+    def load_settings(self) -> None:
+        """Override load_settings for standalone mode.
+
+        QSettings.value() is unreliable in Maya standalone due to PySide6
+        enum dispatch bugs. Restore splitter state safely and fall back to
+        hardcoded font defaults rather than crashing.
+        """
+        try:
+            splitter_settings = self.settings.value("splitter")
+            self.ui.editor_splitter.restoreState(splitter_settings)  # type: ignore
+        except Exception:
+            pass
+        try:
+            splitter_settings = self.settings.value("vertical_splitter")
+            self.ui.vertical_splitter.restoreState(splitter_settings)  # type: ignore
+        except Exception:
+            pass
+        try:
+            self.resize(self.settings.value("size", QSize(1024, 720)))
+        except Exception:
+            self.resize(QSize(1024, 720))
+        try:
+            workspace = self.settings.value("workspace")
+            self.load_workspace_to_editor(workspace)
+        except Exception:
+            pass
+
+        self.font = QFont("Courier New", 12, 50, False)
+        self.update_fonts.emit(self.font)
 

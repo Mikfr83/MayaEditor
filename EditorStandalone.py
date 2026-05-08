@@ -1,4 +1,4 @@
-#!/Applications/Autodesk/maya2024/Maya.app/Contents/bin/mayapy
+#!/Applications/Autodesk/maya2026/Maya.app/Contents/bin/mayapy
 import os
 import sys
 from contextlib import redirect_stdout
@@ -31,6 +31,10 @@ class OutputWrapper(QObject):
     def write(self, text):
         self.output_write.emit(text, self._stdout)
 
+    def flush(self):
+        if hasattr(self._stream, "flush"):
+            self._stream.flush()
+
 
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -45,10 +49,9 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout()
         widget = QWidget()
         widget.setLayout(layout)
-        layout.addChildWidget(self.editor)
+        layout.addWidget(self.editor)
         self.setCentralWidget(widget)
         self.create_scene_toolbar()
-
         self.show()
 
     def create_scene_toolbar(self):
@@ -89,9 +92,7 @@ class MainWindow(QMainWindow):
             msg_box.setWindowTitle("Warning!")
             msg_box.setText("Maya Scene Not Saved")
             msg_box.setInformativeText("Do you want to save your changes?")
-            msg_box.setStandardButtons(
-                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
-            )
+            msg_box.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
             msg_box.setDefaultButton(QMessageBox.Save)
             ret = msg_box.exec()
 
@@ -115,7 +116,6 @@ class MainWindow(QMainWindow):
             self.save()
 
     def get_file_name(self) -> str:
-
         filename, _ = QFileDialog.getSaveFileName(
             self,
             "Select Filename Name",
@@ -125,7 +125,8 @@ class MainWindow(QMainWindow):
         return filename
 
     def write_output(self, text, stdout):
-        self.editor.output_window.append_html(text)
+        if hasattr(self, "editor"):
+            self.editor.output_window.append_html(text)
 
     def save(self) -> None:
         if self.scene_format.currentIndex() == 0:
@@ -135,7 +136,6 @@ class MainWindow(QMainWindow):
         self.is_saved = True
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-
         if event.key() == Qt.Key_Escape:
             QApplication.exit(1)
 
@@ -145,26 +145,18 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
-
     QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)
-    # This has to be done before generating the window but after init of Qt
     maya.standalone.initialize(name="python")
 
-    # I know all imports should be at the top but this needs to be done after
-    # Maya is initialize else you just get stubs that don't work.
     import maya.cmds as cmds
     import maya.OpenMayaUI as omui
     from shiboken6 import wrapInstance  # type: ignore
 
-    # query the MayaEditor module file for location of source
     root_path = cmds.moduleInfo(path=True, moduleName="MayaEditor")
-    # add this to our python path to we can access the modules
     sys.path.insert(0, root_path + "/plug-ins")
-    # Again a late import but relies on Maya so needs to be done here.
     import MayaEditorCore
 
-    # Now construct our main window. This will stand in for the Maya Main window
     window = MainWindow()
     window.resize(1024, 720)
     window.show()
