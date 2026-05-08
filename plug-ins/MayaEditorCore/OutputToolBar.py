@@ -19,10 +19,10 @@ This file contains the class to produce the main toolbar and buttons for the edi
 from typing import Any, Optional
 
 import maya.cmds as cmds
-from PySide2.QtCore import *
-from PySide2.QtGui import *
-from PySide2.QtUiTools import *
-from PySide2.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtUiTools import *
+from PySide6.QtWidgets import *
 
 
 class OutputToolBar(QToolBar):

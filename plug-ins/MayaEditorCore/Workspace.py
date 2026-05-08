@@ -24,8 +24,8 @@ import json
 from pathlib import Path
 from typing import List
 
-from PySide2.QtCore import QDir
-from PySide2.QtWidgets import QInputDialog, QLineEdit, QMessageBox
+from PySide6.QtCore import QDir
+from PySide6.QtWidgets import QInputDialog, QLineEdit, QMessageBox
 
 
 class Workspace:
@@ -136,7 +136,7 @@ class Workspace:
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
             )
             msg_box.setDefaultButton(QMessageBox.Save)
-            ret = msg_box.exec_()
+            ret = msg_box.exec()
 
             if ret == QMessageBox.Save:
                 self.save(self.file_name)

@@ -18,9 +18,9 @@ from typing import Any, Callable, Optional, Type
 
 import maya.api.OpenMaya as OpenMaya
 import maya.mel as mel
-from PySide2.QtCore import *
-from PySide2.QtGui import *
-from PySide2.QtWidgets import (
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtWidgets import (
     QFileDialog,
     QInputDialog,
     QLineEdit,

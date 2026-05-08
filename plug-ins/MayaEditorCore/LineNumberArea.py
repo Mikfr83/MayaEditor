@@ -13,9 +13,9 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from PySide2.QtCore import *
-from PySide2.QtGui import *
-from PySide2.QtWidgets import QWidget
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtWidgets import QWidget
 
 
 # Based on the Qt Editor Demo

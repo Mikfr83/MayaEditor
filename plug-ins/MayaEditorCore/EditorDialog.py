@@ -24,13 +24,13 @@ import maya.cmds as cmds
 import maya.OpenMayaUI as omui
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
-from PySide2.QtCore import *
-from PySide2.QtGui import *
-from PySide2.QtUiTools import *
-from PySide2.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtUiTools import *
+from PySide6.QtWidgets import *
 
 # Note this is from Maya not pyside so type hints not generated
-from shiboken2 import wrapInstance  # type: ignore
+from shiboken6 import wrapInstance  # type: ignore
 
 from .EditorToolBar import EditorToolBar
 from .MainUI import Ui_editor_dialog
@@ -362,7 +362,7 @@ class EditorDialogCore(QDialog):
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
             )
             msg_box.setDefaultButton(QMessageBox.Save)
-            ret = msg_box.exec_()
+            ret = msg_box.exec()
             if ret == QMessageBox.Save:
                 saved = editor.save_file()
                 if saved:

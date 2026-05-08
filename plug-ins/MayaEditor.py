@@ -18,11 +18,11 @@ import sys
 import maya.api.OpenMaya as OpenMaya
 import maya.api.OpenMayaUI as OpenMayaUI
 import maya.cmds as cmds
-from PySide2 import QtCore, QtWidgets
-from PySide2.QtCore import QFile
-from PySide2.QtGui import QColor, QFont
-from PySide2.QtUiTools import QUiLoader
-from shiboken2 import wrapInstance  # type: ignore
+from PySide6 import QtCore, QtWidgets
+from PySide6.QtCore import QFile
+from PySide6.QtGui import QColor, QFont
+from PySide6.QtUiTools import QUiLoader
+from shiboken6 import wrapInstance  # type: ignore
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 from builtins import int
 

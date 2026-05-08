@@ -3,7 +3,7 @@
 ![alt](images/Screenshot.png)
 A work in progress replacement for the Maya Script Editor
 
-Written in Python 3 so will only work with more modern version of Maya testing on Maya 2023 using PySide2 
+Written in Python 3 so will only work with more modern version of Maya testing on Maya using PySide6 
 
 See [TODO.md](TODO.md) for roadmap
 

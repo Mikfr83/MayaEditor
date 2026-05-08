@@ -9,10 +9,10 @@ import importlib.util
 import io
 
 import maya.standalone
-from PySide2.QtCore import *
-from PySide2.QtGui import *
-from PySide2.QtUiTools import *
-from PySide2.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtUiTools import *
+from PySide6.QtWidgets import *
 
 
 class OutputWrapper(QObject):
@@ -93,7 +93,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
             )
             msg_box.setDefaultButton(QMessageBox.Save)
-            ret = msg_box.exec_()
+            ret = msg_box.exec()
 
             if ret == QMessageBox.Save:
                 self.save()
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     # Maya is initialize else you just get stubs that don't work.
     import maya.cmds as cmds
     import maya.OpenMayaUI as omui
-    from shiboken2 import wrapInstance  # type: ignore
+    from shiboken6 import wrapInstance  # type: ignore
 
     # query the MayaEditor module file for location of source
     root_path = cmds.moduleInfo(path=True, moduleName="MayaEditor")
@@ -168,5 +168,5 @@ if __name__ == "__main__":
     window = MainWindow()
     window.resize(1024, 720)
     window.show()
-    app.exec_()
+    app.exec()
     maya.standalone.uninitialize()
