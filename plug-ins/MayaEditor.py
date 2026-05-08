@@ -66,8 +66,13 @@ def MayaEditorUIScript(restore=False):
     if MayaEditorMixinWindow is None:
         # Create a custom mixin widget for the first time
         print("creating a new ui")
-        MayaEditorMixinWindow = MayaEditorCore.EditorDialog()
-        MayaEditorMixinWindow.setObjectName("MayaEditor")
+        try:
+            MayaEditorMixinWindow = MayaEditorCore.EditorDialog()
+            MayaEditorMixinWindow.setObjectName("MayaEditor")
+        except Exception:
+            import traceback
+            OpenMaya.MGlobal.displayWarning(traceback.format_exc())
+            raise
 
     if restore == True:
         # Add custom mixin widget to the workspace control
@@ -118,9 +123,10 @@ class MayaEditor(OpenMaya.MPxCommand):
 
     @classmethod
     def cleanup(cls):
-        # cleanup the UI and call the destructors
-        MayaEditor.ui.deleteLater()
-        MayaEditor.ui = None
+        global MayaEditorMixinWindow
+        if MayaEditorMixinWindow is not None:
+            MayaEditorMixinWindow.deleteLater()
+            MayaEditorMixinWindow = None
 
 
 def initializePlugin(plugin):

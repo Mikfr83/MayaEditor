@@ -119,30 +119,46 @@ class EditorDialogCore(QDialog):
         self.load_settings()
         self.create_live_editors()
         self.update_fonts.emit(self.font)
-        self.show()
 
     def load_settings(self) -> None:
-        """Load in the setting from QSettings for the editor."""
-        splitter_settings = self.settings.value("splitter")
-        self.ui.editor_splitter.restoreState(splitter_settings)  # type: ignore
+        """Load in the setting from QSettings for the editor.
 
-        splitter_settings = self.settings.value("vertical_splitter")
-        self.ui.vertical_splitter.restoreState(splitter_settings)  # type: ignore
-        sz = self.settings.value(
-            "size",
-        )
-        self.resize(self.settings.value("size", QSize(1024, 720)))
-        workspace = self.settings.value("workspace")
+        Each section is wrapped individually so a corrupt or missing value
+        never prevents the editor from opening.  PySide6 (Maya 2026+) broke
+        the PySide2-style ``type=`` kwarg on QSettings.value() and also
+        raises with complex default values, so all casting is done manually.
+        """
         try:
-            self.load_workspace_to_editor(workspace)
-        except:
+            self.ui.editor_splitter.restoreState(self.settings.value("splitter"))  # type: ignore
+        except Exception:
             pass
+        try:
+            self.ui.vertical_splitter.restoreState(self.settings.value("vertical_splitter"))  # type: ignore
+        except Exception:
+            pass
+        try:
+            size = self.settings.value("size")
+            if size is not None:
+                self.resize(size)
+            else:
+                self.resize(QSize(1024, 720))
+        except Exception:
+            self.resize(QSize(1024, 720))
+        try:
+            workspace = self.settings.value("workspace")
+            self.load_workspace_to_editor(workspace)
+        except Exception:
+            pass
+
         self.settings.beginGroup("Font")
-        name = str(self.settings.value("font-name", "Courier New") or "Courier New")
-        size = int(self.settings.value("font-size", 12) or 12)
-        weight = int(self.settings.value("font-weight", 50) or 50)  # 50 == QFont::Normal
-        _italic = self.settings.value("font-italic", False)
-        italic = _italic in (True, "true", "True", "1", 1)
+        try:
+            name = str(self.settings.value("font-name") or "Courier New")
+            size = int(self.settings.value("font-size") or 12)
+            weight = int(self.settings.value("font-weight") or 50)  # 50 == QFont::Normal
+            _italic = self.settings.value("font-italic")
+            italic = _italic in (True, "true", "True", "1", 1)
+        except Exception:
+            name, size, weight, italic = "Courier New", 12, 50, False
         self.settings.endGroup()
 
         self.font = QFont(name, size, weight, italic)
@@ -678,13 +694,15 @@ class EditorDialogCore(QDialog):
             self.sidebar_models.generate_code_model()
             self.ui.sidebar_treeview.setHeaderHidden(True)
 
-class EditorDialog(MayaQWidgetDockableMixin,EditorDialogCore):
+class EditorDialog(MayaQWidgetDockableMixin, EditorDialogCore):
     def __init__(self):
-        EditorDialogCore.__init__(self)
+        super(EditorDialog, self).__init__()
+        self.show(dockable=True)
 
 class EditorDialogStandalone(EditorDialogCore):
     def __init__(self):
         EditorDialogCore.__init__(self)
+        self.show()
 
     def load_settings(self) -> None:
         """Override load_settings for standalone mode.
