@@ -12,9 +12,15 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""This is for Developer use only.
+"""Developer hot-reload script.
 
-This function makes it easier for developers to run the editor as it will unload all the modules see code notes for how to use
+Unloads all MayaEditorCore sub-modules from ``sys.modules`` and re-imports
+them so code changes take effect without restarting Maya.
+
+Usage
+-----
+Run this script from Maya's Script Editor (or source it) after editing any
+``MayaEditorCore`` module.
 """
 import importlib
 import sys
@@ -23,9 +29,14 @@ import maya.cmds as cmds
 
 
 def editor() -> None:
+    """Delete stale MayaEditorCore modules and re-import the editor.
+
+    Removes all known sub-modules from ``sys.modules``, then does a fresh
+    import of ``MayaEditorCore`` and opens the editor dialog.
+    """
     if cmds.workspaceControl("NCCA_Script_EditorWorkspaceControl", exists=True):
         cmds.deleteUI("NCCA_Script_EditorWorkspaceControl", control=True)
-    # if you add a new module to the project add it here
+
     modules = (
         "MayaEditorCore.EditorDialog",
         "MayaEditorCore",
@@ -42,20 +53,17 @@ def editor() -> None:
         "MayaEditorCore.FindDialog",
         "MayaEditorCore.EditorIcons",
     )
-    # query the MayaEditor module file for location of source
+
     root_path = cmds.moduleInfo(path=True, moduleName="MayaEditor")
-    # add this to our python path to we can access the modules
     sys.path.insert(0, root_path + "/plug-ins")
-    # if the module is already loaded remove the modules then reload
     if "MayaEditorCore.EditorDialog" in sys.modules.keys():
         for module in modules:
             del sys.modules[module]
         print("deleting and reloading module")
+
     import MayaEditorCore
 
     MayaEditorCore.EditorDialog()
-    # MayaEditorCore.EditorDialogDockable()
-    # cmds.workspaceControl("NCCA_Script_EditorWorkspaceControl", e=True, visible=True)
 
 
 editor()

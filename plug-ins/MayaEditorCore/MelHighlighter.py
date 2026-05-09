@@ -12,110 +12,135 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""Custom Highlighter for Python.
-
-This will be attached to the editor to do code syntax highlighting, modified from
-the Qt Editor example and other sources. 
-"""
-
-from typing import Any, Dict
+"""Syntax highlighter for MEL source code."""
+from typing import Any, Dict, List, Tuple
 
 import maya.cmds as cmds
 from PySide6.QtCore import QRegularExpression, Qt
-from PySide6.QtGui import *
-from PySide6.QtWidgets import *
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QSyntaxHighlighter,
+    QTextCharFormat,
+)
 
 
 def _create_format(style_colour: str, style: str = "") -> QTextCharFormat:
+    """Create a QTextCharFormat from a named colour string.
+
+    Parameters
+    ----------
+    style_colour : str
+        Named colour string (e.g. ``"darkGray"``).
+    style : str
+        Optional style flags; ``"bold"`` and/or ``"italic"``.
+
+    Returns
+    -------
+    QTextCharFormat
+        The configured text format.
+    """
     colour = QColor()
     colour.setNamedColor(style_colour)
-
     new_format = QTextCharFormat()
     new_format.setForeground(QBrush(colour))
     if "bold" in style:
-        new_format.setFontWeight(QFont.Bold)  # type: ignore
+        new_format.setFontWeight(QFont.Bold)
     if "italic" in style:
         new_format.setFontItalic(True)
-
     return new_format
 
 
 def _create_format_rgb(style_colour: QColor, style: str = "") -> QTextCharFormat:
+    """Create a QTextCharFormat from a QColor.
+
+    Parameters
+    ----------
+    style_colour : QColor
+        Colour for the text foreground.
+    style : str
+        Optional style flags; ``"bold"`` and/or ``"italic"``.
+
+    Returns
+    -------
+    QTextCharFormat
+        The configured text format.
+    """
     new_format = QTextCharFormat()
     new_format.setForeground(QBrush(style_colour))
     if "bold" in style:
-        new_format.setFontWeight(QFont.Bold)  # type: ignore
+        new_format.setFontWeight(QFont.Bold)
     if "italic" in style:
         new_format.setFontItalic(True)
-
     return new_format
 
 
 class MelHighlighter(QSyntaxHighlighter):
-    # fmt: off
-    # Mel keywords
-    keywords = ["and", "as", "case", "catch", "continue", "do", "else", "exit", "false", "for" ,"from" ,"if", "in", "local", "not", "of", "off", "on", "or", "random", "return", "then", "throw", "to", "true", "try", "when", "where", "while", "with", "vector","string", "float", "int", "array","proc","global" ]
+    """QSyntaxHighlighter for MEL with keyword, operator, string and comment rules."""
 
-    # Mel operators
-#    ! ( ) . ; [ \ ] ` + &lt; = &gt
-    operators = [
+    keywords: List[str] = [
+        "and", "as", "case", "catch", "continue", "do", "else", "exit",
+        "false", "for", "from", "if", "in", "local", "not", "of", "off",
+        "on", "or", "random", "return", "then", "throw", "to", "true",
+        "try", "when", "where", "while", "with", "vector", "string",
+        "float", "int", "array", "proc", "global",
+    ]
+
+    operators: List[str] = [
         "=",
-        # Comparison
-        "==","!=","<","<=","[^>]>",">=",
-        # Arithmetic
-        "\+","-","\*","/","//", "\%","\*\*",
-        # In-place 
-        "\+=","-=","\*=","/=","\%=",
-        # Bitwise
-        "\^", "\|","\&","\~","[^>]>>","<<"]
+        "==", "!=", "<", "<=", "[^>]>", ">=",
+        "\\+", "-", "\\*", "/", "//", "\\%", "\\*\\*",
+        "\\+=", "-=", "\\*=", "/=", "\\%=",
+        "\\^", "\\|", "\\&", "\\~", "[^>]>>", "<<",
+    ]
 
-    # Python braces
-    braces = ["\{","\}","\(","\)","\[","\]"] 
-    # fmt: on
+    braces: List[str] = ["\\{", "\\}", "\\(", "\\)", "\\[", "\\]"]
 
-    mayaCmds = cmds.help("[a-z]*", list=True)
+    mayaCmds: List[str] = cmds.help("[a-z]*", list=True)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Any = None) -> None:
+        """Initialise the highlighter with colour rules.
+
+        Parameters
+        ----------
+        parent : object or None
+            Parent object for the QSyntaxHighlighter.
+        """
         super().__init__(parent)
-        self.styles = {
+        self.styles: Dict[str, QTextCharFormat] = {
             "keyword": _create_format_rgb(QColor(255, 166, 87)),
             "operator": _create_format_rgb(QColor(255, 166, 87)),
             "brace": _create_format("darkGray"),
             "deffunc": _create_format_rgb(QColor(121, 192, 234)),
             "string": _create_format_rgb(QColor(165, 214, 255)),
-            "string2": _create_format_rgb(QColor(165, 214, 255)),  # "yellow"),
-            "comment": _create_format_rgb("Gray"),
+            "string2": _create_format_rgb(QColor(165, 214, 255)),
+            "comment": _create_format_rgb(QColor("Gray")),
             "self": _create_format_rgb(QColor(121, 192, 255)),
             "numbers": _create_format("GhostWhite"),
             "maya": _create_format("SpringGreen"),
         }
-        self.tri_single = (QRegularExpression("'''"), 1, self.styles["string2"])
-        self.tri_double = (QRegularExpression('"""'), 2, self.styles["string2"])
+        self.tri_single: Tuple[QRegularExpression, int, QTextCharFormat] = (
+            QRegularExpression("'''"), 1, self.styles["string2"],
+        )
+        self.tri_double: Tuple[QRegularExpression, int, QTextCharFormat] = (
+            QRegularExpression('"""'), 2, self.styles["string2"],
+        )
 
-        rules = []
-        # Keyword, operator, and brace rules
+        rules: List[Tuple[str, int, QTextCharFormat]] = []
         rules += [
             (r"\b%s\b" % w, 0, self.styles["keyword"]) for w in MelHighlighter.keywords
         ]
-
         rules += [
             (r"%s" % o, 0, self.styles["operator"]) for o in MelHighlighter.operators
         ]
         rules += [(r"%s" % b, 0, self.styles["brace"]) for b in MelHighlighter.braces]
-
-        # All other rules
         rules += [
-            # 'self'
             (r"\bself\b", 0, self.styles["self"]),
-            # Double-quoted string, possibly containing escape sequences
             (r'"[^"\\]*(\\.[^"\\]*)*"', 0, self.styles["string"]),
-            # Single-quoted string, possibly containing escape sequences
             (r"'[^'\\]*(\\.[^'\\]*)*'", 0, self.styles["string"]),
-            # 'proc' followed by an identifier
             (r"\bproc\b\s*(\w+)", 1, self.styles["deffunc"]),
-            # From '//' until a newline
             (r"//[^\n]*", 0, self.styles["comment"]),
-            # Numeric literals
             (r"\b[+-]?[0-9]+[lL]?\b", 0, self.styles["numbers"]),
             (r"\b[+-]?0[xX][0-9A-Fa-f]+[lL]?\b", 0, self.styles["numbers"]),
             (
@@ -124,12 +149,18 @@ class MelHighlighter(QSyntaxHighlighter):
                 self.styles["numbers"],
             ),
         ]
-
-        # Build a QRegularExpression for each pattern
-        self.rules = [(QRegularExpression(pat), index, fmt) for (pat, index, fmt) in rules]
+        self.rules: List[Tuple[QRegularExpression, int, QTextCharFormat]] = [
+            (QRegularExpression(pat), index, fmt) for (pat, index, fmt) in rules
+        ]
 
     def highlightBlock(self, textBlock: str) -> None:
-        # Do other syntax formatting
+        """Apply syntax highlighting to the given block of text.
+
+        Parameters
+        ----------
+        textBlock : str
+            The text block to highlight.
+        """
         for expr, nth, syFormat in self.rules:
             match = expr.match(textBlock)
             while match.hasMatch():
@@ -137,15 +168,36 @@ class MelHighlighter(QSyntaxHighlighter):
                 length = len(match.captured(nth))
                 self.setFormat(index, length, syFormat)
                 match = expr.match(textBlock, index + length)
-
         self.setCurrentBlockState(0)
-
-        # Do multi-line strings
         in_multiline = self.match_multiline(textBlock, *self.tri_single)
         if not in_multiline:
-            in_multiline = self.match_multiline(textBlock, *self.tri_double)
+            self.match_multiline(textBlock, *self.tri_double)
 
-    def match_multiline(self, textBlock: str, delimiter: QRegularExpression, in_state, style):
+    def match_multiline(
+        self,
+        textBlock: str,
+        delimiter: QRegularExpression,
+        in_state: int,
+        style: QTextCharFormat,
+    ) -> bool:
+        """Apply highlighting for multi-line string delimiters.
+
+        Parameters
+        ----------
+        textBlock : str
+            Current text block.
+        delimiter : QRegularExpression
+            The delimiter pattern.
+        in_state : int
+            Block state value representing being inside a multi-line string.
+        style : QTextCharFormat
+            Format to apply to the multi-line string content.
+
+        Returns
+        -------
+        bool
+            True if the block ends inside a multi-line string.
+        """
         if self.previousBlockState() == in_state:
             start = 0
             add = 0
@@ -157,7 +209,6 @@ class MelHighlighter(QSyntaxHighlighter):
             else:
                 start = match.capturedStart()
                 add = match.capturedLength()
-
         while start >= 0:
             end_match = delimiter.match(textBlock, start + add)
             if end_match.hasMatch():
@@ -173,7 +224,4 @@ class MelHighlighter(QSyntaxHighlighter):
                 break
             start = next_match.capturedStart()
             add = next_match.capturedLength()
-
-        if self.currentBlockState() == in_state:
-            return True
-        return False
+        return bool(self.currentBlockState() == in_state)

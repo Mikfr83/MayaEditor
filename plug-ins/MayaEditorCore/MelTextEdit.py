@@ -12,39 +12,31 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""MelTextEdit and related classes this Class extends the QPlainTextEdit."""
+"""MEL editor widget extending TextEdit with syntax highlighting and execution."""
 from collections import namedtuple
-from typing import Any, Callable, Optional, Type
+from typing import Any, Callable, List, Optional, Type
 
 import maya.api.OpenMaya as OpenMaya
 import maya.mel as mel
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-from PySide6.QtWidgets import (
-    QFileDialog,
-    QInputDialog,
-    QLineEdit,
-    QPlainTextEdit,
-    QTextEdit,
-    QToolTip,
-    QWidget,
-)
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
+from PySide6.QtGui import QFont, QKeyEvent, QTextCursor
+from PySide6.QtWidgets import QFileDialog, QWidget
 
-# from .LineNumberArea import LineNumberArea
 from .MelHighlighter import MelHighlighter
 from .TextEdit import TextEdit
 
 
 class MelTextEdit(TextEdit):
-    """Custom QPlainTextEdit.
+    """QPlainTextEdit customised for MEL script editing with highlighting and execution.
 
-
-    Custom QPlainTextEdit to allow us to add extra code editor features such as
-    shortcuts zooms and line numbers
+    Signals
+    -------
+    code_model_changed : Signal()
+        Emitted when the code model (function list) is regenerated.
     """
 
     code_model_changed = Signal()
-    code_model_data = namedtuple("CodeModel", "scope line_number function_name")
+    code_model_data = namedtuple("code_model_data", "scope line_number function_name")  # noqa: PYI024
 
     def __init__(
         self,
@@ -54,104 +46,121 @@ class MelTextEdit(TextEdit):
         filename: Optional[str] = None,
         live: bool = False,
         parent: Optional[Any] = None,
-    ):
-        """
-        Construct our MelTextEdit.
+    ) -> None:
+        """Construct a MelTextEdit.
 
-        Parameters:
-        code (str): The source code for the editor.
-        filename (str) : The name of the source file used by the tab.
-        live (bool) : if set to true we echo output and clear on run like the maya one
-        parent (QObject) : parent widget.
+        Parameters
+        ----------
+        read_only : bool
+            Whether the editor is read-only.
+        show_line_numbers : bool
+            Whether to display line numbers.
+        code : str or None
+            Initial source code.
+        filename : str or None
+            Associated filename.
+        live : bool
+            If True, echo output and clear on run (like Maya's script editor).
+        parent : QObject or None
+            Parent widget.
         """
         super().__init__(read_only, show_line_numbers, code, filename, parent)
-
         self.highlighter = MelHighlighter()
         self.highlighter.setDocument(self.document())
-        self.execute_selected = False
-        self.live = live
+        self.execute_selected: bool = False
+        self.live: bool = live
         self.copyAvailable.connect(self.selection_changed)
-        self.code_model = list()
+        self.code_model: List[Any] = []
         self.generate_code_model()
 
-    def eventFilter(self, obj: QObject, event: QEvent):
-        """Event filter for key events.
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        """Filter key events for MEL editor shortcuts.
 
-        We filter different keyboard combinations for shortcuts here at present.
-        Ctrl (Command mac) + Return : execute code.
-        Ctrl (Command mac) + S : save file.
-        F5 : run current file
-        Parameters :
-        obj (QObject) : the object passing the event.
-        event (QEvent) : the event to be processed.
-        Returns : True on processed or False to pass to next event filter.
+        Supported shortcuts:
+        - Ctrl+Return / F5 : execute code
+        - Ctrl+S : save file
 
+        Parameters
+        ----------
+        obj : QObject
+            The object that triggered the event.
+        event : QEvent
+            The event to process.
+
+        Returns
+        -------
+        bool
+            True if the event was handled, False otherwise.
         """
         if isinstance(obj, MelTextEdit) and event.type() == QEvent.KeyPress:
+            key_event = event
             if (
-                event.key() == Qt.Key_Return
-                and event.modifiers() == Qt.ControlModifier
-                or event.key() == Qt.Key_F5
-            ):
+                key_event.key() == Qt.Key_Return
+                and key_event.modifiers() == Qt.ControlModifier
+            ) or key_event.key() == Qt.Key_F5:
                 self.execute_code()
                 return True
-            elif event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
+            elif (
+                key_event.key() == Qt.Key_S
+                and key_event.modifiers() == Qt.ControlModifier
+            ):
                 self.save_file()
                 return True
             else:
                 return super().eventFilter(obj, event)
-        else:
-            return False
+        return False
 
-    def event(self, event):
-        """Process the events directly passed to the editor.
+    def event(self, event: QEvent) -> bool:
+        """Process events passed directly to the editor.
 
-        This is mainly used for toolTips and Wheel events at present but may be
-        used for more in the future.
+        Handles tooltip events for code hints.
 
-        Parameters :
-        event (QEvent) : the event to be processed.
-        Returns :  True is event is processed here else False to pass on.
+        Parameters
+        ----------
+        event : QEvent
+            The event to process.
+
+        Returns
+        -------
+        bool
+            True if the event was handled.
         """
-        if event.type() is QEvent.ToolTip:
+        if event.type() == QEvent.ToolTip:
             self.process_tooltip(event)
             return True
-        else:
-            return TextEdit.event(self, event)
+        return TextEdit.event(self, event)
 
-    def process_tooltip(self, event) -> None:
-        """Process the tooltip event.
+    def process_tooltip(self, event: QEvent) -> None:
+        """Process a tooltip event (placeholder for MEL help integration).
 
-        Called from the event filter and is used to generate code hints
-        Parameters :
-        event (QEvent) : the toolTip event.
+        Parameters
+        ----------
+        event : QEvent
+            The tooltip event.
         """
-        # Grab the help event and get the position
+        from PySide6.QtCore import QPoint
+        from PySide6.QtGui import QToolTip
+
         help_event = event
         pos = QPoint(help_event.pos())
-        # find text under the cursos and lookup
         cursor = self.cursorForPosition(pos)
         cursor.select(QTextCursor.WordUnderCursor)
-        raw_text = cursor.selectedText()
-        QToolTip.showText(help_event.globalPos(), "Coming soon help tooltups")
+        QToolTip.showText(help_event.globalPos(), "Coming soon help tooltips")
 
     def execute_code(self) -> None:
-        """Execute the code in the current Editor.
+        """Execute the MEL code in the editor.
 
-        This will either execute the selected text or the whole file dependant upon
-        the execute_selected flag. Called from the event filter on CTR + Return.
+        If text is selected, only the selection is executed.
+        In live mode the editor is cleared after execution.
         """
         if self.execute_selected:
             cursor = self.textCursor()
             text = cursor.selectedText()
-            # returns a unicode paragraph instead of \n
-            # so replace
             text = text.replace("\u2029", "\n")
             if self.live:
                 self.update_output.emit(self.toPlainText() + "\n")
-
             value = mel.eval(text)
-            if self.live and value != None:
+            if self.live and value is not None:
                 value = str(value) + "\n"
                 self.update_output_html.emit(value)
         else:
@@ -160,59 +169,67 @@ class MelTextEdit(TextEdit):
                 self.update_output.emit(text_to_run)
                 self.clear()
             value = mel.eval(text_to_run)
-            # if we are a live window clear the editor
-            if self.live and value != None:
+            if self.live and value is not None:
                 value = str(value)
                 self.update_output.emit(value)
 
-    def selection_changed(self, state):
-        """Signal called when text is selected.
-        This is used to set the flag in the editor so if we have selected code we
-        only execute that rather than the whole file.
+    def selection_changed(self, state: bool) -> None:
+        """Track whether text is selected for partial execution.
+
+        Parameters
+        ----------
+        state : bool
+            True if text is selected.
         """
         self.execute_selected = state
 
     def save_file(self) -> bool:
-        """Save the current editor file.
+        """Save the current editor content.
 
-        This is called from the event filter or menu when the file is to be saved.
-        It will check to see if the file is called untitled.py if so this will be an unsaved file so will popup a file save dialog, if this is canceled False will be returned else true for a saved file.
+        If the filename is ``untitled.py`` a save dialog is shown.
 
-        Returns : True if saved else False to flag cancel was selected.
+        Returns
+        -------
+        bool
+            True if saved, False if cancelled.
         """
         if self.filename == "untitled.py":
             filename, _ = QFileDialog.getSaveFileName(
-                self,
-                "Save As",
-                "",
-                ("Python (*.py)"),
+                self, "Save As", "", "Python (*.py)"
             )
-            if filename is None:
+            if not filename:
                 return False
-            else:
-                self.filename = filename
+            self.filename = filename
+            if self.parent and hasattr(self.parent, "workspace"):
                 self.parent.workspace.add_file(filename)
-
-        # Now we have a filename save
-        with open(self.filename, "w") as code_file:
-            code_file.write(self.toPlainText())
-        self.needs_saving = False
-        # update code model on save
-        self.generate_code_model()
-
+        if self.filename:
+            with open(self.filename, "w") as code_file:
+                code_file.write(self.toPlainText())
+            self.needs_saving = False
+            self.generate_code_model()
         return True
 
     def extract_mel_function(self, code: str) -> str:
+        """Extract the function name from a MEL proc definition.
+
+        Parameters
+        ----------
+        code : str
+            The proc definition string.
+
+        Returns
+        -------
+        str
+            The function name, or empty if not found.
         """
-        Scan the mel function and extract, easiest way is to search for
-        ( as a function must have this.
-        """
-        code = code.split(" ")
-        for exp in code:
+        parts = code.split(" ")
+        for exp in parts:
             if "(" in exp:
                 return exp[: exp.find("(")]
+        return ""
 
-    def generate_code_model(self):
+    def generate_code_model(self) -> None:
+        """Scan the document for MEL proc definitions and build a code model."""
         document = self.document()
         lines_of_code = document.blockCount()
         self.code_model.clear()
@@ -232,5 +249,4 @@ class MelTextEdit(TextEdit):
                         scope="proc", line_number=line + 1, function_name=function
                     )
                 )
-        # Need to signal code model has changed
         self.code_model_changed.emit()

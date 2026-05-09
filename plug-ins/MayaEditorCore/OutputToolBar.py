@@ -12,43 +12,52 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""Output Tool Bar code
-
-This file contains the class to produce the main toolbar and buttons for the editor, most functions will connect to the parent 
-"""
+"""Output toolbar with clear, copy, save and help controls."""
 from typing import Any, Optional
 
 import maya.cmds as cmds
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-from PySide6.QtUiTools import *
-from PySide6.QtWidgets import *
+from PySide6.QtCore import QObject, Slot
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QLabel,
+    QPushButton,
+    QToolBar,
+)
 
 
 class OutputToolBar(QToolBar):
-    """Inherit from the main toolbar class and extend"""
+    """Toolbar for the output window with clear, copy, save, and help controls."""
 
-    def __init__(self, parent: Optional[Any] = None):
-        """Construct our toolbar and connect items
+    def __init__(self, parent: Optional[Any] = None) -> None:
+        """Construct the output toolbar.
 
-        This creates the main toolbar with run, run default goto, search etc
-        Parameters :
-        parent (QDialog) : the parent widget must be the EditorDialog
+        Parameters
+        ----------
+        parent : QDialog or None
+            The parent EditorDialog instance.
         """
         super().__init__(parent)
-        self.parent: Callable[[QObject], QObject] = parent
+        assert parent is not None
+        self.parent: Any = parent
         self.setFloatable(False)
         self.setMovable(False)
+
         clear_output = QPushButton("Clear")
         clear_output.clicked.connect(parent.output_window.clear)
         self.addWidget(clear_output)
+
         copy_to_clipboard = QPushButton("Copy")
         copy_to_clipboard.clicked.connect(self.clipboard_copy)
         self.addWidget(copy_to_clipboard)
+
         save_to_file = QPushButton("Save")
         save_to_file.clicked.connect(self.save_to_file)
         self.addWidget(save_to_file)
         self.addSeparator()
+
         label = QLabel("Output Level")
         self.addWidget(label)
         output_level = QComboBox()
@@ -58,36 +67,52 @@ class OutputToolBar(QToolBar):
         output_level.currentIndexChanged.connect(self.update_output_level)
         self.addWidget(output_level)
         self.addSeparator()
+
         show_help = QCheckBox("Show Help")
         show_help.setCheckable(True)
         show_help.setChecked(True)
         show_help.toggled.connect(self.show_help)
         self.addWidget(show_help)
+
         open_web_help = QPushButton("Online Help")
         open_web_help.clicked.connect(lambda x: cmds.help(doc=True))
         self.addWidget(open_web_help)
 
     @Slot(bool)
     def show_help(self, state: bool) -> None:
-        self.parent.help_frame.setVisible(state)
+        """Toggle the help panel visibility.
+
+        Parameters
+        ----------
+        state : bool
+            True to show, False to hide.
+        """
+        if self.parent:
+            self.parent.help_frame.setVisible(state)
 
     @Slot(int)
     def update_output_level(self, index: int) -> None:
+        """Update the Maya command echo level.
+
+        Parameters
+        ----------
+        index : int
+            0 for Echo All, 1 for Normal.
+        """
         cmds.commandEcho(state=index)
 
     def clipboard_copy(self) -> None:
+        """Copy the output window content to the clipboard."""
         clipboard = QApplication.clipboard()
         clipboard.clear(mode=clipboard.Clipboard)
         text = self.parent.output_window.toPlainText()
         clipboard.setText(text, mode=clipboard.Clipboard)
 
-    def save_to_file(self):
+    def save_to_file(self) -> None:
+        """Save the output window content to a text file."""
         file_name, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Output Text",
-            "untitled.txt",
-            ("Text (*.txt)"),
+            self, "Save Output Text", "untitled.txt", "Text (*.txt)"
         )
-        if file_name is not None:
+        if file_name:
             with open(file_name, "w") as output_file:
                 output_file.write(self.parent.output_window.toPlainText())

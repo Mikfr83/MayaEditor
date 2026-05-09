@@ -1,7 +1,12 @@
 #!/Applications/Autodesk/maya2026/Maya.app/Contents/bin/mayapy
+"""Standalone Maya editor launcher for use outside of Maya's GUI.
+
+Requires ``maya.standalone.initialize()`` before importing ``maya.cmds``.
+"""
 import os
 import sys
 from contextlib import redirect_stdout
+from typing import Optional
 
 sys.path.insert(0, os.getcwd() + "/plug-ins/")
 
@@ -9,16 +14,37 @@ import importlib.util
 import io
 
 import maya.standalone
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-from PySide6.QtUiTools import *
-from PySide6.QtWidgets import *
+from PySide6.QtCore import QCoreApplication, QEvent, QKeyEvent, QObject, Qt, Signal
+from PySide6.QtGui import QResizeEvent
+from PySide6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QToolBar,
+    QWidget,
+)
 
 
 class OutputWrapper(QObject):
+    """Intercepts stdout/stderr and emits them as signals."""
+
     output_write = Signal(object, object)
 
-    def __init__(self, parent, stdout=True):
+    def __init__(self, parent: QObject, stdout: bool = True) -> None:
+        """Wrap a stream and redirect it.
+
+        Parameters
+        ----------
+        parent : QObject
+            Parent object.
+        stdout : bool
+            True to wrap sys.stdout, False for sys.stderr.
+        """
         super().__init__(parent)
         if stdout:
             self._stream = sys.stdout
@@ -28,24 +54,43 @@ class OutputWrapper(QObject):
             sys.stderr = self
         self._stdout = stdout
 
-    def write(self, text):
+    def write(self, text: str) -> None:
+        """Emit the text via signal.
+
+        Parameters
+        ----------
+        text : str
+            The text to emit.
+        """
         self.output_write.emit(text, self._stdout)
 
-    def flush(self):
+    def flush(self) -> None:
+        """Flush the original stream."""
         if hasattr(self._stream, "flush"):
             self._stream.flush()
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, parent=None):
+    """Main window for the standalone Maya editor."""
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        """Construct the main window with editor and scene controls.
+
+        Parameters
+        ----------
+        parent : QWidget or None
+            Parent widget.
+        """
         super().__init__()
         stdout = OutputWrapper(self, True)
         stdout.output_write.connect(self.write_output)
         stderr = OutputWrapper(self, False)
         stderr.output_write.connect(self.write_output)
+
         self.editor = MayaEditorCore.EditorDialogStandalone()
-        self.is_saved = True
-        self.filename = "untitled.ma"
+        self.is_saved: bool = True
+        self.filename: str = "untitled.ma"
+
         layout = QHBoxLayout()
         widget = QWidget()
         widget.setLayout(layout)
@@ -54,11 +99,13 @@ class MainWindow(QMainWindow):
         self.create_scene_toolbar()
         self.show()
 
-    def create_scene_toolbar(self):
+    def create_scene_toolbar(self) -> None:
+        """Create a toolbar with Maya scene controls (new, save, save-as)."""
         self.toolbar = QToolBar(self)
         self.toolbar.setWindowTitle("Maya Scene Controls")
         self.toolbar.setFloatable(True)
         self.toolbar.setMovable(True)
+
         new_scene = QPushButton("New Scene")
         self.toolbar.addWidget(new_scene)
         new_scene.clicked.connect(self.new_maya_scene)
@@ -79,56 +126,83 @@ class MainWindow(QMainWindow):
 
         self.addToolBar(self.toolbar)
 
-    def new_maya_scene(self):
+    def new_maya_scene(self) -> bool:
+        """Create a new Maya scene, prompting to save the current one.
+
+        Returns
+        -------
+        bool
+            True if the scene was created or discarded, False on cancel.
+        """
         print("new maya scene")
         filename = self.get_file_name()
-        if filename is not None:
+        if filename:
             self.filename = filename
             cmds.file(f=True, new=True)
             cmds.file(rename=self.filename)
             self.save()
+            return True
         else:
             msg_box = QMessageBox()
             msg_box.setWindowTitle("Warning!")
             msg_box.setText("Maya Scene Not Saved")
             msg_box.setInformativeText("Do you want to save your changes?")
-            msg_box.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
+            msg_box.setStandardButtons(
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+            )
             msg_box.setDefaultButton(QMessageBox.Save)
             ret = msg_box.exec()
-
             if ret == QMessageBox.Save:
                 self.save()
                 return True
-            else:
-                return False
+        return False
 
-    def save_maya_scene(self):
+    def save_maya_scene(self) -> None:
+        """Save the current Maya scene."""
         if self.filename == "untitled.ma":
             filename = self.get_file_name()
             cmds.file(rename=self.filename)
         if self.is_saved:
             self.save()
 
-    def save_maya_scene_as(self):
+    def save_maya_scene_as(self) -> None:
+        """Save the current Maya scene with a new name."""
         if self.filename == "untitled.ma":
             filename = self.get_file_name()
             cmds.file(rename=self.filename)
             self.save()
 
     def get_file_name(self) -> str:
+        """Show a save-file dialog for Maya scenes.
+
+        Returns
+        -------
+        str
+            The selected filename, or empty string if cancelled.
+        """
         filename, _ = QFileDialog.getSaveFileName(
             self,
             "Select Filename Name",
             "untitled.ma",
-            ("Maya Scenes (*.ma,*.mb)"),
+            "Maya Scenes (*.ma,*.mb)",
         )
-        return filename
+        return str(filename)
 
-    def write_output(self, text, stdout):
+    def write_output(self, text: str, stdout: bool) -> None:
+        """Route text to the editor's output window.
+
+        Parameters
+        ----------
+        text : str
+            The text to write.
+        stdout : bool
+            Whether the output came from stdout or stderr.
+        """
         if hasattr(self, "editor"):
             self.editor.output_window.append_html(text)
 
     def save(self) -> None:
+        """Save the Maya scene in the selected format (ASCII or binary)."""
         if self.scene_format.currentIndex() == 0:
             cmds.file(f=True, type="mayaAscii", save=True)
         else:
@@ -136,12 +210,26 @@ class MainWindow(QMainWindow):
         self.is_saved = True
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Exit on Escape key.
+
+        Parameters
+        ----------
+        event : QKeyEvent
+            The key event.
+        """
         if event.key() == Qt.Key_Escape:
             QApplication.exit(1)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
+        """Resize the editor to fill the window.
+
+        Parameters
+        ----------
+        event : QResizeEvent
+            The resize event.
+        """
         self.editor.resize(event.size())
-        return super().resizeEvent(event)
+        super().resizeEvent(event)
 
 
 if __name__ == "__main__":

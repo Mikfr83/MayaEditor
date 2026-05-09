@@ -12,9 +12,15 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""MayaEditor plugin — registers the ``MayaEditor`` MPxCommand.
+
+Load the MayaEditorCore package and provide a dockable script editor that
+replaces the built-in Script Editor.
+"""
 import os
 import sys
 from builtins import int
+from typing import Any, Optional
 
 import maya.api.OpenMaya as OpenMaya
 import maya.api.OpenMayaUI as OpenMayaUI
@@ -27,158 +33,177 @@ from PySide6.QtGui import QColor, QFont
 from PySide6.QtUiTools import QUiLoader
 from shiboken6 import wrapInstance  # type: ignore
 
-# Grab the module root so we can append our python path
 try:
     root_path = cmds.moduleInfo(path=True, moduleName="MayaEditor")
 except RuntimeError:
     root_path = os.path.dirname(os.path.abspath(__file__)).replace("/plug-ins", "")
+
 try:
     import importlib
 
-    # for debug purposed it is easier to re-load module
-    # so append to path then try to delete if exists.
     sys.path.insert(0, root_path + "/plug-ins")
     try:
         print("deleting MayaEditorCore")
         del sys.modules["MayaEditorCore"]
         import MayaEditorCore
-    except:
+    except Exception:
         import MayaEditorCore
 except ImportError:
     OpenMaya.MGlobal.displayError("Trouble importing MayaEditorCore Module")
-    # throw exception and let maya deal with it
     raise
 
-MayaEditorMixinWindow = None
+MayaEditorMixinWindow: Optional[Any] = None
 
 
-def MayaEditorUIScript(restore=False):
+def MayaEditorUIScript(restore: bool = False) -> Optional[Any]:
+    """Create or restore the MayaEditor dockable UI.
+
+    Parameters
+    ----------
+    restore : bool
+        When True the workspace control already exists and only the UI needs
+        to be restored into it.
+
+    Returns
+    -------
+    QWidget or None
+        The editor mixin window.
+    """
     global MayaEditorMixinWindow
     import MayaEditorCore
 
-    """ When the control is restoring, the workspace control has already been created and
-        all that needs to be done is restoring its UI.
-    """
-    if restore == True:
-        # Grab the created workspace control with the following.
-        restoredControl = omui.MQtUtil.getCurrentParent()
+    if restore:
+        restoredControl = OpenMayaUI.MQtUtil.getCurrentParent()
 
     if MayaEditorMixinWindow is None:
-        # Create a custom mixin widget for the first time
         print("creating a new ui")
         try:
             MayaEditorMixinWindow = MayaEditorCore.EditorDialog()
             MayaEditorMixinWindow.setObjectName("MayaEditor")
         except Exception:
             import traceback
+
             OpenMaya.MGlobal.displayWarning(traceback.format_exc())
             raise
 
-    if restore == True:
-        # Add custom mixin widget to the workspace control
-        mixinPtr = omui.MQtUtil.findControl(MayaEditorMixinWindow.objectName())
-        omui.MQtUtil.addWidgetToMayaLayout(int(mixinPtr), int(restoredControl))
+    if restore:
+        mixinPtr = OpenMayaUI.MQtUtil.findControl(
+            MayaEditorMixinWindow.objectName()
+        )
+        OpenMayaUI.MQtUtil.addWidgetToMayaLayout(
+            int(mixinPtr), int(restoredControl)
+        )
     else:
-        # Create a workspace control for the mixin widget by passing all the needed parameters. See workspaceControl command documentation for all available flags.
-        MayaEditorMixinWindow.show(dockable=True, height=600, width=800, uiScript="MayaEditorUIScript(restore=True)")
-
+        MayaEditorMixinWindow.show(
+            dockable=True,
+            height=600,
+            width=800,
+            uiScript="MayaEditorUIScript(restore=True)",
+        )
     return MayaEditorMixinWindow
 
 
-""" Using the workspaceControl Maya command to query/edit flags about the created
-    we can use maya.cmds.workspaceControl('MayaEditorWorkspaceControl', e=True,restore=True)
-    to re-show the workspace editor if needed. Will need to add this to a button at some stage
-"""
-
-
-maya_useNewAPI = True  # type: ignore
+maya_useNewAPI = True
 
 
 class MayaEditor(OpenMaya.MPxCommand):
-    CMD_NAME = "MayaEditor"
-    ui = None
+    """MPxCommand that opens the NCCA Maya Editor window."""
 
-    def __init__(self):
-        super(MayaEditor, self).__init__()
+    CMD_NAME: str = "MayaEditor"
+    ui: Optional[Any] = None
+
+    def __init__(self) -> None:
+        """Initialise the command."""
+        super().__init__()
 
     @classmethod
-    def doIt(cls, args):
-        """
-        Called when the command is executed in script
+    def doIt(cls, args: Any) -> Optional[Any]:
+        """Execute the command: create or show the editor UI.
+
+        Parameters
+        ----------
+        args : Any
+            Command arguments (unused).
+
+        Returns
+        -------
+        QWidget or None
+            The editor widget instance.
         """
         ui = MayaEditorUIScript()
         if ui is not None:
             try:
-                cmds.workspaceControl("MayaEditorWorkspaceControl", e=True, restore=True)
-            except:
+                cmds.workspaceControl(
+                    "MayaEditorWorkspaceControl", e=True, restore=True
+                )
+            except Exception:
                 pass
         return ui
 
     @classmethod
-    def creator(cls):
-        """
-        Think of this as a factory
+    def creator(cls) -> "MayaEditor":
+        """Factory method called by Maya to create a command instance.
+
+        Returns
+        -------
+        MayaEditor
+            A new instance of the command.
         """
         return MayaEditor()
 
     @classmethod
-    def cleanup(cls):
+    def cleanup(cls) -> None:
+        """Delete the editor mixin window and release resources."""
         global MayaEditorMixinWindow
         if MayaEditorMixinWindow is not None:
             MayaEditorMixinWindow.deleteLater()
             MayaEditorMixinWindow = None
 
 
-def initializePlugin(plugin):
-    """
-    Load our plugin
+def initializePlugin(plugin: Any) -> None:
+    """Register the MayaEditor command with Maya.
+
+    Parameters
+    ----------
+    plugin : MObject
+        The plugin object provided by Maya.
     """
     vendor = "NCCA"
     version = "1.0.0"
-
     plugin_fn = OpenMaya.MFnPlugin(plugin, vendor, version)
     try:
         plugin_fn.registerCommand(MayaEditor.CMD_NAME, MayaEditor.creator)
-        # cmds.evalDeferred("cmds.MayaEditor()")
-        # mel.eval("""
-        #         global proc ScriptEditor() {
-        #             python("cmds.MayaEditor()");
-        #         }
-        #     """)
-    except:
-        OpenMaya.MGlobal.displayError("Failed to register command: {0}".format(MayaEditor.CMD_NAME))
+    except Exception:
+        OpenMaya.MGlobal.displayError(
+            f"Failed to register command: {MayaEditor.CMD_NAME}"
+        )
 
 
-def uninitializePlugin(plugin):
+def uninitializePlugin(plugin: Any) -> None:
+    """Deregister the MayaEditor command.
+
+    Parameters
+    ----------
+    plugin : MObject
+        The plugin object provided by Maya.
     """
-    Exit point for a plugin
-    """
-    # cleanup the dialog first
     MayaEditor.cleanup()
-    # mel.eval("""
-    #         global proc ScriptEditor() {
-    #             if (`window -exists scriptEditorPanel1Window`) {
-    #                 showWindow scriptEditorPanel1Window;
-    #             } else {
-    #                 scriptedPanel -e -tearOff scriptEditorPanel1 scriptEditorPanel1Window;
-    #             }
-    #         }
-    #         """)
     plugin_fn = OpenMaya.MFnPlugin(plugin)
     try:
         plugin_fn.deregisterCommand(MayaEditor.CMD_NAME)
-    except:
-        OpenMaya.MGlobal.displayError("Failed to deregister command: {0}".format(MayaEditor.CMD_NAME))
+    except Exception:
+        OpenMaya.MGlobal.displayError(
+            f"Failed to deregister command: {MayaEditor.CMD_NAME}"
+        )
 
 
 if __name__ == "__main__":
-    """
-    So if we execute this in the script editor it will be a __main__ so we can put testing code etc here
-    Loading the plugin will not run this
-    As we are loading the plugin it needs to be in the plugin path.
-    """
-
     plugin_name = "MayaEditor.py"
-
-    cmds.evalDeferred('if cmds.pluginInfo("{0}", q=True, loaded=True): cmds.unloadPlugin("{0}")'.format(plugin_name))
-    cmds.evalDeferred('if not cmds.pluginInfo("{0}", q=True, loaded=True): cmds.loadPlugin("{0}")'.format(plugin_name))
+    cmds.evalDeferred(
+        f'if cmds.pluginInfo("{plugin_name}", q=True, loaded=True): '
+        f'cmds.unloadPlugin("{plugin_name}")'
+    )
+    cmds.evalDeferred(
+        f'if not cmds.pluginInfo("{plugin_name}", q=True, loaded=True): '
+        f'cmds.loadPlugin("{plugin_name}")'
+    )

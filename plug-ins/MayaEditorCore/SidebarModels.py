@@ -1,69 +1,68 @@
-import os
+"""Sidebar model classes for workspace, file-system and code-outline views."""
+import os as os_module
 from pathlib import Path
+from typing import Any, Dict, List, Union
 
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-from PySide6.QtWidgets import *
+from PySide6.QtCore import Qt, QObject, QStandardItemModel, Slot
+from PySide6.QtGui import QIcon, QStandardItem
+from PySide6.QtWidgets import QFileSystemModel
 
 from .MelTextEdit import MelTextEdit
 from .PythonTextEdit import PythonTextEdit, class_model_data, code_model_data
 
-"""
-This class contains the different models used by the sidebar, this allows us to switch the display
-from Active Files (Workspace mode), file system, and class / function navigator
-"""
-
 
 class SideBarModels(QObject):
-    """
-    SideBarModel contains different Qt Item models for the sidebar QTreeView
-    Slots :
-    append_to_workspace add file to workspace mode
-    remove_from_workspace removes short filename from model
+    """Manages the three sidebar models: workspace, file-system and code outline.
+
+    Slots
+    -----
+    append_to_workspace(name, icon)
+        Add a file to the workspace model.
+    remove_from_workspace(name)
+        Remove a filename from the workspace model.
+    generate_code_model()
+        Rebuild the code-outline model for the active editor.
+    code_model_needs_update()
+        Slot connected to editor tab changes.
+    change_active_model(index)
+        Switch the active sidebar model.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Any = None) -> None:
+        """Initialise the three models and load icons.
+
+        Parameters
+        ----------
+        parent : QObject or None
+            The parent EditorDialog instance.
+        """
         super().__init__(parent)
-        self.parent = parent
-        self.workspace = QStandardItemModel()
-        self.active_model = self.workspace
-        self.file_system_model = QFileSystemModel()
-        self.file_system_model.setRootPath(Path.cwd().name)
+        self.parent: Any = parent
+        self.workspace: QStandardItemModel = QStandardItemModel()
+        self.active_model: QStandardItemModel = self.workspace
+        self.file_system_model: QFileSystemModel = QFileSystemModel()
+        self.file_system_model.setRootPath(str(Path.cwd().name))
         filters = ["*.txt", "*.py", "*.mel", "*.md"]
         self.file_system_model.setNameFilters(filters)
-        self.code_system_model = QStandardItemModel()
-        if os.system == "Windows":
-            # load icons
-            self.class_icon = QIcon(
-                self.parent.root_path + "\\plug-ins\\icons\\class.png"
-            )
-            self.method_icon = QIcon(
-                self.parent.root_path + "\\plug-ins\\icons\\method.png"
-            )
-            self.function_icon = QIcon(
-                self.parent.root_path + "\\plug-ins\\icons\\function.png"
-            )
+        self.code_system_model: QStandardItemModel = QStandardItemModel()
 
-        else:
-            # load icons
-            self.class_icon = QIcon(self.parent.root_path + "/plug-ins/icons/class.png")
-            self.method_icon = QIcon(
-                self.parent.root_path + "/plug-ins/icons/method.png"
-            )
-            self.function_icon = QIcon(
-                self.parent.root_path + "/plug-ins/icons/function.png"
-            )
-            self.proc_icon = QIcon(self.parent.root_path + "/plug-ins/icons/proc.png")
-            self.global_icon = QIcon(
-                self.parent.root_path + "/plug-ins/icons/global.png"
-            )
+        root_path = self.parent.root_path if self.parent else "."
+        sep = "\\" if os_module.name == "nt" else "/"
+        self.class_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}class.png")
+        self.method_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}method.png")
+        self.function_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}function.png")
+        self.proc_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}proc.png")
+        self.global_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}global.png")
 
     def append_to_workspace(self, name: str, icon: QIcon) -> None:
-        """
-        Add a short name to our workspace model, this name will be used by the main editor when removing
-        Parameters :
-        name(str) : the short name to display in the model
-        icon(QIcon) : the icon to display
+        """Add a short filename to the workspace model.
+
+        Parameters
+        ----------
+        name : str
+            The display name for the entry.
+        icon : QIcon
+            The icon to display alongside the name.
         """
         item = QStandardItem()
         item.setText(name)
@@ -71,11 +70,25 @@ class SideBarModels(QObject):
         self.workspace.insertRow(0, item)
 
     def remove_from_workspace(self, name: str) -> None:
+        """Remove entries matching *name* from the workspace model.
+
+        Parameters
+        ----------
+        name : str
+            The display name to match (partial match).
+        """
         items = self.workspace.findItems(name, Qt.MatchContains)
         for i in items:
             self.workspace.removeRow(i.row())
 
-    def create_mel_model(self, widget):
+    def create_mel_model(self, widget: MelTextEdit) -> None:
+        """Populate the code model from a MEL editor's code_model data.
+
+        Parameters
+        ----------
+        widget : MelTextEdit
+            The MEL editor widget.
+        """
         for proc in widget.code_model:
             item = QStandardItem()
             icon = self.proc_icon
@@ -86,20 +99,27 @@ class SideBarModels(QObject):
             item.setIcon(icon)
             self.code_system_model.appendRow(item)
 
-    def create_python_model(self, widget):
-        for item in widget.code_model:
+    def create_python_model(self, widget: PythonTextEdit) -> None:
+        """Populate the code model from a Python editor's code_model data.
+
+        Parameters
+        ----------
+        widget : PythonTextEdit
+            The Python editor widget.
+        """
+        for entry_data in widget.code_model:
             entry = QStandardItem()
-            if isinstance(item, code_model_data):
-                entry.setText(f"{item.name}")
-                entry.setData(item.line_number)
+            if isinstance(entry_data, code_model_data):
+                entry.setText(f"{entry_data.name}")
+                entry.setData(entry_data.line_number)
                 entry.setIcon(self.function_icon)
                 self.code_system_model.appendRow(entry)
-            elif isinstance(item, dict):
-                class_info = list(item.keys())[0]
+            elif isinstance(entry_data, dict):
+                class_info = list(entry_data.keys())[0]
                 entry.setText(f"{class_info.name}")
                 entry.setIcon(self.class_icon)
                 entry.setData(class_info.line_number)
-                methods = list(item.values())
+                methods = list(entry_data.values())
                 for m in methods[0]:
                     method = QStandardItem()
                     method.setText(f"{m.name}")
@@ -109,26 +129,37 @@ class SideBarModels(QObject):
                 self.code_system_model.appendRow(entry)
 
     @Slot()
-    def generate_code_model(self, text=""):
+    def generate_code_model(self, text: str = "") -> None:
+        """Rebuild the code-outline model for the currently active editor tab.
+
+        Parameters
+        ----------
+        text : str
+            Unused, present for slot compatibility.
+        """
         self.code_system_model.clear()
         tab = self.parent.ui.editor_tab
         widget = tab.widget(tab.currentIndex())
         if isinstance(widget, MelTextEdit):
             self.create_mel_model(widget)
-
         elif isinstance(widget, PythonTextEdit):
             self.create_python_model(widget)
 
     @Slot()
-    def code_model_needs_update(self):
+    def code_model_needs_update(self) -> None:
+        """Update the code model if it is currently the active sidebar view."""
         if self.active_model == self.code_system_model:
             self.generate_code_model()
 
     @Slot(int)
-    def change_active_model(self, index):
-        # I know I could use a list of a dictionary to store this but I think this makes the
-        # rest of the code much neater and we will only have 3-4 types to content with
-        # Guess this is the C++ programmer in me coming out.
+    def change_active_model(self, index: int) -> None:
+        """Switch the active sidebar model.
+
+        Parameters
+        ----------
+        index : int
+            0 = workspace, 1 = file-system, 2 = code outline.
+        """
         if index == 0:
             self.active_model = self.workspace
         elif index == 1:

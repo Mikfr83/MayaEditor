@@ -12,24 +12,48 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""Editor Dialog Class for the NCCA Maya Editor.
+"""Core Editor Dialog for the NCCA Maya Editor.
 
-This is the core Dialog class where all other elements are created and controlled. This can work stand alone as well as part of a plugin.
+This is the main dialog class where all child widgets are created and managed.
+It can work standalone or as a Maya dockable plugin mixin.
 """
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import maya.api.OpenMaya as OpenMaya
 import maya.cmds as cmds
 import maya.OpenMayaUI as omui
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-from PySide6.QtUiTools import *
-from PySide6.QtWidgets import *
+from PySide6.QtCore import QDir, QEvent, QKeyEvent, QSettings, QSize, Qt, Signal, Slot
+from PySide6.QtGui import (
+    QAction,
+    QCloseEvent,
+    QCompleter,
+    QFont,
+    QIcon,
+    QKeySequence,
+    QTextCursor,
+)
+from PySide6.QtUiTools import QUiLoader
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFontDialog,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QMenuBar,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QWidget,
+)
 
-# Note this is from Maya not pyside so type hints not generated
 from shiboken6 import wrapInstance  # type: ignore
 
 from .EditorToolBar import EditorToolBar
@@ -43,97 +67,105 @@ from .Workspace import Workspace
 
 
 def get_main_window() -> Any:
-    """Return the maya main window for parenting.
+    """Return the Maya main window as a QDialog for parenting.
 
-    Grab the maya main window
-    Returns : QWidget of the MayaMainWindow
+    Returns
+    -------
+    QDialog
+        The Maya main window wrapped as a QWidget.
     """
     window = omui.MQtUtil.mainWindow()
     return wrapInstance(int(window), QDialog)
 
 
-
-
 class EditorDialogCore(QDialog):
-    """Editor Dialog window main class we inherit from this for either a
-    standalone editor or a mixin (dockable) maya one.
+    """Base editor dialog class.
 
-    Inherits from QDialog and loads the ui from files.
+    Inherit from this for either a standalone editor or a Maya dockable mixin.
+    Loads the UI from generated code and creates all sub-widgets.
+
+    Signals
+    -------
+    update_output : Signal(str)
+        Emitted with plain text for the output window.
+    update_output_html : Signal(str)
+        Emitted with HTML text for the output window.
+    update_fonts : Signal(QFont)
+        Emitted when the editor font changes.
+    toggle_line_numbers : Signal(bool)
+        Emitted to toggle line number visibility.
     """
 
     update_output = Signal(str)
     update_output_html = Signal(str)
     update_fonts = Signal(QFont)
     toggle_line_numbers = Signal(bool)
-    editor_name = "NCCA_Script_Editor"
+    editor_name: str = "NCCA_Script_Editor"
 
-    def __init__(self, parent=None):
-        """Construct the class.
+    def __init__(self, parent: Optional[Any] = None) -> None:
+        """Construct the EditorDialogCore.
 
-        Parameters :
-        parent (QWidget) : the Maya parent window Note this is set to None so we can use the get_main_window() function in maya
-        If we run standalone we need to pass in a main window instance (see the EditorStandalone.py module)
+        Parameters
+        ----------
+        parent : QWidget or None
+            Parent widget. None uses ``get_main_window()`` in Maya.
         """
-        super(EditorDialogCore, self).__init__(parent=parent)
-
+        super().__init__(parent=parent)
         self.setObjectName(self.__class__.editor_name)
-        # Register the callback to filter the outputs to out output window
-        self.callback_id = OpenMaya.MCommandMessage.addCommandOutputCallback(
+
+        self.callback_id: int = OpenMaya.MCommandMessage.addCommandOutputCallback(
             self.message_callback, ""
         )
-        # Load setting first as required by other elements
         self.settings = QSettings("NCCA", "NCCA_Maya_Editor")
-        # Next the UI as again required for other things
-        self.root_path = cmds.moduleInfo(path=True, moduleName="MayaEditor")
+        self.root_path: str = cmds.moduleInfo(path=True, moduleName="MayaEditor")
         self.python_icon = QIcon(":/icons/python.png")
-        self.mel_icon = QIcon(":icons/mel.png")
-        self.text_icon = QIcon(":icons/text.png")
+        self.mel_icon = QIcon(":/icons/mel.png")
+        self.text_icon = QIcon(":/icons/text.png")
 
         self.ui = Ui_editor_dialog()
         self.ui.setupUi(self)
-
-        # This should make the window stay on top
         self.setWindowFlags(Qt.Tool)
-        # as other things may depend on this create early
+
         self.create_output_window()
         self.create_tool_bar()
         self.create_menu_bar()
+
         self.sidebar_models = SideBarModels(self)
         self.ui.sidebar_treeview.setModel(self.sidebar_models.active_model)
         self.ui.sidebar_selector.currentIndexChanged.connect(self.change_active_model)
 
-        # connect tab close event
         self.ui.editor_tab.tabCloseRequested.connect(self.tab_close_requested)
         self.ui.editor_tab.currentChanged.connect(
             self.sidebar_models.code_model_needs_update
         )
-        # setup  view sidebar
         self.ui.sidebar_treeview.setHeaderHidden(True)
         self.ui.sidebar_treeview.clicked.connect(self.sidebar_view_changed)
-        # create workspace
+
         self.workspace = Workspace()
-        # connect output window signals
+
         self.update_output.connect(self.output_window.append_plain_text)
         self.update_output_html.connect(self.output_window.append_html)
-        # Finally load in settings and create live editors
+
         self.load_settings()
         self.create_live_editors()
         self.update_fonts.emit(self.font)
 
     def load_settings(self) -> None:
-        """Load in the setting from QSettings for the editor.
+        """Load editor settings from QSettings.
 
-        Each section is wrapped individually so a corrupt or missing value
-        never prevents the editor from opening.  PySide6 (Maya 2026+) broke
-        the PySide2-style ``type=`` kwarg on QSettings.value() and also
-        raises with complex default values, so all casting is done manually.
+        Each section is wrapped individually so a corrupt or missing value never
+        prevents the editor from opening. PySide6 (Maya 2026+) broke the
+        PySide2-style ``type=`` kwarg on QSettings.value() and also raises with
+        complex default values, so all casting is done manually.
         """
         try:
-            self.ui.editor_splitter.restoreState(self.settings.value("splitter"))  # type: ignore
+            self.ui.editor_splitter.restoreState(self.settings.value("splitter"))
         except Exception:
             pass
         try:
-            self.ui.vertical_splitter.restoreState(self.settings.value("vertical_splitter"))  # type: ignore
+            self.ui.vertical_splitter.restoreState(
+                self.settings.value("vertical_splitter")
+            )
         except Exception:
             pass
         try:
@@ -146,7 +178,8 @@ class EditorDialogCore(QDialog):
             self.resize(QSize(1024, 720))
         try:
             workspace = self.settings.value("workspace")
-            self.load_workspace_to_editor(workspace)
+            if workspace:
+                self.load_workspace_to_editor(workspace)
         except Exception:
             pass
 
@@ -154,7 +187,7 @@ class EditorDialogCore(QDialog):
         try:
             name = str(self.settings.value("font-name") or "Courier New")
             size = int(self.settings.value("font-size") or 12)
-            weight = int(self.settings.value("font-weight") or 50)  # 50 == QFont::Normal
+            weight = int(self.settings.value("font-weight") or 50)
             _italic = self.settings.value("font-italic")
             italic = _italic in (True, "true", "True", "1", 1)
         except Exception:
@@ -165,12 +198,14 @@ class EditorDialogCore(QDialog):
         self.update_fonts.emit(self.font)
 
     def save_settings(self) -> None:
-        self.settings.setValue("splitter", self.ui.editor_splitter.saveState())  # type: ignore
-        self.settings.setValue("vertical_splitter", self.ui.vertical_splitter.saveState())  # type: ignore
+        """Save current editor settings to QSettings."""
+        self.settings.setValue("splitter", self.ui.editor_splitter.saveState())
+        self.settings.setValue(
+            "vertical_splitter", self.ui.vertical_splitter.saveState()
+        )
         self.settings.setValue("size", self.size())
         self.settings.setValue("workspace", self.workspace.file_name)
         self.settings.beginGroup("Font")
-
         self.settings.setValue("font-name", self.font.family())
         self.settings.setValue("font-size", self.font.pointSize())
         self.settings.setValue("font-weight", self.font.weight())
@@ -178,23 +213,37 @@ class EditorDialogCore(QDialog):
         self.settings.endGroup()
 
     def change_font(self) -> None:
-        """Popup a change font dialog and set all editor fonts"""
-        (ok, font) = QFontDialog.getFont(self)
+        """Show a font dialog and apply the selected font to all editors."""
+        ok, font = QFontDialog.getFont(self)
         if ok:
             self.font = font
             self.update_fonts.emit(self.font)
 
     def debug(self, message: str) -> None:
+        """Append a debug message to the output window.
+
+        Parameters
+        ----------
+        message : str
+            The debug message text.
+        """
         self.output_window.appendHtml(
             f'<b><p style="color:yellow">Debug :</p></b><p>{message}</p>'
         )
 
-    def message_callback(self, message: str, mtype, client_data) -> None:
-        """Use to put maya output to the output window.
-        Parameters :
-        message (str) : the message to print
-        mtype (int) : type of message
-        client_data : not used
+    def message_callback(
+        self, message: str, mtype: int, client_data: Any
+    ) -> None:
+        """Callback for Maya command output to route messages to the output window.
+
+        Parameters
+        ----------
+        message : str
+            The message text.
+        mtype : int
+            The message type constant from OpenMaya.MCommandMessage.
+        client_data : Any
+            Unused client data.
         """
         colour = "white"
         message_prefix = ""
@@ -206,91 +255,90 @@ class EditorDialogCore(QDialog):
         elif mtype == OpenMaya.MCommandMessage.kInfo:
             colour = "white"
             message_prefix = "Info : "
-
         elif mtype == OpenMaya.MCommandMessage.kWarning:
             colour = "green"
             message_prefix = "Warning : "
         elif mtype == OpenMaya.MCommandMessage.kError:
             colour = "red"
             message_prefix = "Error : "
-
         elif mtype == OpenMaya.MCommandMessage.kResult:
             colour = "lightblue"
             message_prefix = "Result :"
 
-        # this moves to the end so we don't get double new lines etc
-        # self.output_window.moveCursor(QTextCursor.End)
         html = f'<p style="color:{colour}"><pre>{message_prefix}{message}</pre></p>'
         self.update_output_html.emit(html)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Event called when the Dialog closeEvent is  triggered.
+        """Save settings and clean up on dialog close.
 
-        We ensure that the setting are saved to the default settings.
-        Parameters :
-        event (QCloseEvent) : event passed in to close
+        Parameters
+        ----------
+        event : QCloseEvent
+            The close event.
         """
         OpenMaya.MMessage.removeCallback(self.callback_id)
         self.save_settings()
         self.workspace.close()
-        super(EditorDialog, self).closeEvent(event)
+        super().closeEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Handle Escape key to close the dialog.
 
+        Parameters
+        ----------
+        event : QKeyEvent
+            The key event.
+        """
         if event.key() == Qt.Key_Escape:
-            return True
-        else:
-            return super().keyPressEvent(event)
+            return
+        super().keyPressEvent(event)
 
     def create_menu_bar(self) -> None:
-        """Create the menubar for the editor."""
+        """Create the menu bar with File, Workspace and Settings menus."""
         self.menu_bar = QMenuBar()
+
         file_menu = QMenu("&File")
         self.menu_bar.addMenu(file_menu)
+
         open_action = QAction("&Open", self)
-        open_action.triggered.connect(self.open_file)  # type: ignore
+        open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
 
         new_action = QAction("&New", self)
-        new_action.triggered.connect(self.new_file)  # type: ignore
+        new_action.triggered.connect(self.new_file)
         file_menu.addAction(new_action)
 
         workspace_menu = QMenu("&Workspace")
         new_workspace = QAction("New Workspace", self)
-        new_workspace.triggered.connect(self.new_workspace)  # type: ignore
+        new_workspace.triggered.connect(self.new_workspace)
         workspace_menu.addAction(new_workspace)
-        # open workspace
+
         open_workspace = QAction("Open Workspace", self)
-        open_workspace.triggered.connect(self.open_workspace)  # type: ignore
+        open_workspace.triggered.connect(self.open_workspace)
         workspace_menu.addAction(open_workspace)
-        # save workspace
+
         save_workspace = QAction("Save Workspace", self)
-        save_workspace.triggered.connect(self.save_workspace)  # type: ignore
+        save_workspace.triggered.connect(self.save_workspace)
         workspace_menu.addAction(save_workspace)
-        # close workspace
+
         close_workspace = QAction("Close Workspace", self)
-        close_workspace.triggered.connect(self.close_workspace)  # type: ignore
+        close_workspace.triggered.connect(self.close_workspace)
         workspace_menu.addAction(close_workspace)
 
         self.menu_bar.addMenu(workspace_menu)
 
         settings_menu = QMenu("&Settings")
-        # Add settings Menu
 
-        # add font action
-        # font_menu = QMenu("&Font", self)
         change_font_action = QAction("Change Font", self)
         settings_menu.addAction(change_font_action)
         change_font_action.triggered.connect(self.change_font)
 
-        # show line numbers
         show_line_numbers_action = QAction("Show Line Numbers", self)
         settings_menu.addAction(show_line_numbers_action)
         show_line_numbers_action.toggled.connect(self.show_line_numbers)
         show_line_numbers_action.setCheckable(True)
         show_line_numbers_action.setChecked(True)
 
-        # show output window
         show_output_window_action = QAction("Show Output Window", self)
         settings_menu.addAction(show_output_window_action)
         show_output_window_action.toggled.connect(
@@ -298,9 +346,10 @@ class EditorDialogCore(QDialog):
         )
         show_output_window_action.setCheckable(True)
         show_output_window_action.setChecked(True)
-        show_output_window_action.setShortcut(QKeySequence(Qt.KeyboardModifier.ControlModifier | Qt.Key_1))
+        show_output_window_action.setShortcut(
+            QKeySequence(Qt.ControlModifier | Qt.Key_1)
+        )
 
-        # show sidebar window
         show_sidebar_action = QAction("Show Sidebar", self)
         settings_menu.addAction(show_sidebar_action)
         show_sidebar_action.toggled.connect(
@@ -308,30 +357,27 @@ class EditorDialogCore(QDialog):
         )
         show_sidebar_action.setCheckable(True)
         show_sidebar_action.setChecked(True)
+        show_sidebar_action.setShortcut(
+            QKeySequence(Qt.ControlModifier | Qt.Key_0)
+        )
 
-        show_sidebar_action.setShortcut(QKeySequence(Qt.KeyboardModifier.ControlModifier | Qt.Key_0))
-
-        # Menu to main menu bar
         self.menu_bar.addMenu(settings_menu)
-
-        self.ui.main_grid_layout.setMenuBar(self.menu_bar)  # type: ignore
+        self.ui.main_grid_layout.setMenuBar(self.menu_bar)
 
     def open_file(self) -> None:
-        """Open a new file and add to the tabs."""
+        """Show a file-open dialog and load the selected file into a new tab."""
         file_name, _ = QFileDialog.getOpenFileName(
             self,
             "Select File to Open",
             "",
-            ("Mel / Python (*.py *.mel, *.*)"),
+            "Mel / Python (*.py *.mel, *.*)",
         )
-        # make sure we are not loading a file in the workspace already
-        if file_name not in self.workspace.files:
+        if file_name and file_name not in self.workspace.files:
             self.create_editor_and_load_files(file_name)
-            # add this file to current workspace
             self.workspace.add_file(file_name)
 
     def new_file(self) -> None:
-        """Create a new file tab."""
+        """Create a new untitled Python file tab."""
         editor = PythonTextEdit(
             code="",
             filename="untitled.py",
@@ -340,36 +386,35 @@ class EditorDialogCore(QDialog):
             live=False,
             parent=self,
         )
-        self.ui.editor_tab.insertTab(0, editor, "untitled.py")  # type: ignore
+        self.ui.editor_tab.insertTab(0, editor, "untitled.py")
         self.ui.editor_tab.setCurrentIndex(0)
         self.ui.editor_tab.widget(0).setFocus()
 
     def create_tool_bar(self) -> None:
-        """Create the toolbar."""
+        """Create the editor and output toolbars."""
         self.tool_bar = EditorToolBar(self)
-        # Add to main dialog
-        self.ui.dock_widget.setWidget(self.tool_bar)  # type: ignore
+        self.ui.dock_widget.setWidget(self.tool_bar)
         self.output_tool_bar = OutputToolBar(self)
-        # Add to main dialog
-        self.ui.output_dock.setWidget(self.output_tool_bar)  # type: ignore
+        self.ui.output_dock.setWidget(self.output_tool_bar)
 
     def tab_close_requested(self, index: int) -> None:
-        """Slot called when a tab close is pressed.
+        """Handle a tab close request with optional save prompt.
 
-        logic to see if we need to save or not is included here for ease.
-        Parameters :
-        index (int) : index of the tab where the close was requested.
+        Parameters
+        ----------
+        index : int
+            Index of the tab being closed.
         """
-        tab: QTabWidget = self.ui.editor_tab  # type: ignore
-        editor: PythonTextEdit = tab.widget(index)  # type: ignore
+        tab = self.ui.editor_tab
+        editor = tab.widget(index)
         file_name = tab.tabText(index)
-        # don't close live editors
-        if file_name in ["Python live_window", "Mel live_window"]:
+
+        if file_name in ("Python live_window", "Mel live_window"):
             return
-        if editor.needs_saving is not True:
+
+        if not editor.needs_saving:
             tab.removeTab(index)
             self.remove_from_open_files(file_name)
-        # need to check if we want to save or discard
         else:
             msg_box = QMessageBox()
             msg_box.setWindowTitle("Warning!")
@@ -385,202 +430,208 @@ class EditorDialogCore(QDialog):
                 if saved:
                     tab.removeTab(index)
                     self.remove_from_open_files(file_name)
-                else:
-                    return
             elif ret == QMessageBox.Discard:
                 tab.removeTab(index)
                 self.remove_from_open_files(file_name)
-            elif ret == QMessageBox.Cancel:
-                pass
 
     def new_workspace(self) -> None:
-        """Create a new workspace.
-
-        Logic checks to ensure the previous workspace is saved or not.
-        """
-        if self.workspace.is_saved is not True:
+        """Create a new workspace, saving the current one if needed."""
+        if not self.workspace.is_saved:
             self.save_workspace()
-        tab = self.ui.editor_tab  # type: ignore
+        tab = self.ui.editor_tab
         tab.clear()
         self.workspace.new()
-        self.ui.sidebar_treeview.model().clear()
+        if self.ui.sidebar_treeview.model():
+            self.ui.sidebar_treeview.model().clear()
         self.create_live_editors()
 
     def save_workspace(self) -> None:
-        """Save current workspace."""
+        """Save the current workspace via a file dialog."""
         file_name, _ = QFileDialog.getSaveFileName(
             self,
             "Select Workspace Name",
             "untitled.workspace",
-            ("Workspace (*.workspace)"),
+            "Workspace (*.workspace)",
         )
-        if file_name is not None:
+        if file_name:
             self.workspace.save(file_name)
 
     def close_workspace(self) -> None:
-        """Close the current workspace."""
-        # if not self.workspace.is_saved :
-        #     self.save_workspace()
-
-        tab = self.ui.editor_tab  # type: ignore
+        """Close the current workspace and reset the editor."""
+        tab = self.ui.editor_tab
         tab.clear()
-        self.ui.sidebar_treeview.clear()
+        if self.ui.sidebar_treeview:
+            self.ui.sidebar_treeview.clear()
         self.create_live_editors()
 
-    def show_line_numbers(self, state):
+    def show_line_numbers(self, state: bool) -> None:
+        """Toggle line number visibility in all editors.
+
+        Parameters
+        ----------
+        state : bool
+            True to show line numbers.
+        """
         self.toggle_line_numbers.emit(state)
 
     def open_workspace(self) -> None:
-        """Open a new workspace.
-
-        There is logic to ensure that the current one is saved or not.
-        """
+        """Open a workspace from file, prompting to save the current one first."""
         file_name, _ = QFileDialog.getOpenFileName(
             self,
             "Select Workspace Name",
             "untitled.workspace",
-            ("Workspace (*.workspace)"),
+            "Workspace (*.workspace)",
         )
-        if file_name is not None:
+        if file_name:
             self.settings.setValue("workspace", file_name)
             self.load_workspace_to_editor(file_name)
 
     def create_editor_and_load_files(self, code_file_name: str) -> None:
-        """This method creates new editors and links the different elements.
+        """Create an editor tab for the given file and load its contents.
 
-        Parameters.
-            code_file_name (str) : full path to the file to load will be truncated to short name for the tabs be getting the last name / extension
-
+        Parameters
+        ----------
+        code_file_name : str
+            Full path to the file to load.
         """
         tab = self.ui.editor_tab
-
         path = Path(code_file_name)
-        if path.is_file():
-            with open(code_file_name, "r") as code_file:
-                short_name = str(Path(code_file_name).name)
-                if path.suffix == ".py":
-                    editor = PythonTextEdit(
-                        code=code_file.read(),
-                        filename=code_file_name,
-                        live=False,
-                        show_line_numbers=True,
-                        read_only=False,
-                        parent=tab,
-                    )
-                    icon = self.python_icon
-                elif path.suffix == ".mel":
-                    editor = MelTextEdit(
-                        code=code_file.read(),
-                        filename=code_file_name,
-                        live=False,
-                        show_line_numbers=True,
-                        read_only=False,
-                        parent=tab,
-                    )
-                    icon = self.mel_icon
-                else:
-                    editor = TextEdit(
-                        code=code_file.read(),
-                        filename=code_file_name,
-                        show_line_numbers=True,
-                        read_only=False,
-                        parent=tab,
-                    )
-                    icon = self.text_icon
-                    editor.set_editor_fonts(self.font)
-
-                # Add to the active files to run
-                if path.suffix in (".mel", ".py"):
-                    self.tool_bar.add_to_active_file_list(short_name)
-                    editor.code_model_changed.connect(
-                        self.sidebar_models.code_model_needs_update
-                    )
-
-                self.workspace.add_file(code_file_name)
-                # self.update_fonts.connect(editor.set_editor_fonts)
-                self.connect_editor_slots(editor)
-                # add to the tab
-                tab_index = tab.addTab(editor, icon, short_name)  # type: ignore
-                tab.setTabsClosable(True)
-                tab.setCurrentIndex(tab_index)
-                # add to the file view and run menu
-                self.sidebar_models.append_to_workspace(short_name, icon)
-                self.update_fonts.emit(self.font)
-
-        else:
+        if not path.is_file():
             self.output_window.appendHtml(
-                f'<b><p style="color:red">Error :</p></b><p>Problem loading  file {code_file_name} from project perhaps it has been removed</p>'
+                f'<b><p style="color:red">Error :</p></b><p>'
+                f'Problem loading file {code_file_name} from project '
+                f'perhaps it has been removed</p>'
             )
+            return
+
+        with open(code_file_name, "r") as code_file:
+            short_name = path.name
+            if path.suffix == ".py":
+                editor = PythonTextEdit(
+                    code=code_file.read(),
+                    filename=code_file_name,
+                    live=False,
+                    show_line_numbers=True,
+                    read_only=False,
+                    parent=tab,
+                )
+                icon = self.python_icon
+            elif path.suffix == ".mel":
+                editor = MelTextEdit(
+                    code=code_file.read(),
+                    filename=code_file_name,
+                    live=False,
+                    show_line_numbers=True,
+                    read_only=False,
+                    parent=tab,
+                )
+                icon = self.mel_icon
+            else:
+                editor = TextEdit(
+                    code=code_file.read(),
+                    filename=code_file_name,
+                    show_line_numbers=True,
+                    read_only=False,
+                    parent=tab,
+                )
+                icon = self.text_icon
+                editor.set_editor_fonts(self.font)
+
+            if path.suffix in (".mel", ".py"):
+                self.tool_bar.add_to_active_file_list(short_name)
+                editor.code_model_changed.connect(
+                    self.sidebar_models.code_model_needs_update
+                )
+
+            self.workspace.add_file(code_file_name)
+            self.connect_editor_slots(editor)
+            tab_index = tab.addTab(editor, icon, short_name)
+            tab.setTabsClosable(True)
+            tab.setCurrentIndex(tab_index)
+            self.sidebar_models.append_to_workspace(short_name, icon)
+            self.update_fonts.emit(self.font)
 
     def load_workspace_to_editor(self, file_name: str) -> None:
-        """Load in the actual workspace data to the editor tab.
-        This is called to load and create each new PythonTextEdit into the tabs
-        Parameters :
-        file_name (str) : full path to the editor file to load
+        """Load workspace data and create editor tabs for each file.
+
+        Parameters
+        ----------
+        file_name : str
+            Full path to the workspace file.
         """
         if self.workspace.load(file_name):
             for code_file_name in self.workspace.files:
                 self.create_editor_and_load_files(code_file_name)
-        # as same code is used for loading new files on initial ws load we set this to true
         self.workspace.is_saved = True
 
     @Slot()
-    def tool_bar_run_clicked(self):
-        """Slot used by the Toolbar run button."""
+    def tool_bar_run_clicked(self) -> None:
+        """Execute the code in the currently active editor tab."""
         self.ui.editor_tab.currentWidget().execute_code()
 
     @Slot(int)
-    def tool_bar_goto_changed(self, line: int):
-        """Slot used by the Toolbar goto dial."""
-        # Note we subtract 1 as the line is defaulting to the correct range
+    def tool_bar_goto_changed(self, line: int) -> None:
+        """Go to a specific line in the active editor.
+
+        Parameters
+        ----------
+        line : int
+            1-based line number.
+        """
         self.ui.editor_tab.currentWidget().goto_line(line - 1)
 
     @Slot()
-    def tool_bar_run_project_clicked(self):
-        """Slot called when run project clicked."""
-        pass
+    def tool_bar_run_project_clicked(self) -> None:
+        """Execute the file selected in the run-project combo box."""
         file_to_run = self.tool_bar.active_project_file.currentText()
-        # first find the index of the active tab
-        tab = self.ui.editor_tab  # type: ignore
+        tab = self.ui.editor_tab
         index = 0
-        for t in range(0, tab.count() + 1):
+        for t in range(tab.count()):
             if file_to_run == tab.tabText(t):
                 index = t
                 break
-        self.ui.editor_tab.widget(index).execute_code()
+        tab.widget(index).execute_code()
 
-    def sidebar_view_changed(self, index):
-        """Update the sidebar model based on the index"""
+    def sidebar_view_changed(self, index: Any) -> None:
+        """Handle clicks in the sidebar tree view.
+
+        Parameters
+        ----------
+        index : QModelIndex
+            The model index that was clicked.
+        """
         selector_index = self.ui.sidebar_selector.currentIndex()
         if selector_index == 0:
-            item = self.sidebar_models.workspace.itemFromIndex(index)  # item.text(0)
+            item = self.sidebar_models.workspace.itemFromIndex(index)
             text = item.text()
-            # first find the index of the active tab
-            tab = self.ui.editor_tab  # type: ignore
-            index = 0
-            for t in range(0, tab.count() + 1):
+            tab = self.ui.editor_tab
+            tab_index = 0
+            for t in range(tab.count()):
                 if text == tab.tabText(t):
-                    index = t
+                    tab_index = t
                     break
-            tab.setCurrentIndex(t)
-        elif selector_index == 1:  # file system view
+            tab.setCurrentIndex(tab_index)
+        elif selector_index == 1:
             path = self.sidebar_models.file_system_model.filePath(index)
             self.create_editor_and_load_files(path)
-        elif selector_index == 2:  # Code_model_view
+        elif selector_index == 2:
             item = self.sidebar_models.code_system_model.itemFromIndex(index)
             self.ui.editor_tab.currentWidget().goto_line(item.data())
 
     def remove_from_open_files(self, filename: str) -> None:
-        """Remove filename from sidebar.
-        Parameters :
-        filename (str) : the name to search for and remove
+        """Remove a filename from the sidebar, toolbar, and workspace.
+
+        Parameters
+        ----------
+        filename : str
+            The filename to remove.
         """
         self.sidebar_models.remove_from_workspace(filename)
-        self.ui.tool_bar.remove_from_active_file_list(filename)
-        # remove from workspace
+        self.tool_bar.remove_from_active_file_list(filename)
         self.workspace.remove_file(filename)
 
     def create_live_editors(self) -> None:
+        """Create the live Python and MEL editor tabs for interactive use."""
         editor = PythonTextEdit(
             code="",
             filename="live_window",
@@ -589,12 +640,11 @@ class EditorDialogCore(QDialog):
             parent=self.ui.editor_tab,
         )
         self.connect_editor_slots(editor)
-
-        self.ui.editor_tab.insertTab(0, editor, self.python_icon, "Python live_window")  # type: ignore
+        self.ui.editor_tab.insertTab(0, editor, self.python_icon, "Python live_window")
         self.ui.editor_tab.setCurrentIndex(0)
         self.ui.editor_tab.widget(0).setFocus()
         self.sidebar_models.append_to_workspace("Python live_window", self.python_icon)
-        # add the Mel live window
+
         editor = MelTextEdit(
             code="",
             filename="live_window",
@@ -604,23 +654,22 @@ class EditorDialogCore(QDialog):
             parent=self.ui.editor_tab,
         )
         self.connect_editor_slots(editor)
-        self.ui.editor_tab.insertTab(0, editor, self.mel_icon, "Mel live_window")  # type: ignore
-        # self.editor_tab.setTabsClosable(False)
+        self.ui.editor_tab.insertTab(0, editor, self.mel_icon, "Mel live_window")
         self.ui.editor_tab.setCurrentIndex(0)
         self.ui.editor_tab.widget(0).setFocus()
         self.sidebar_models.append_to_workspace("Mel live_window", self.mel_icon)
 
     def create_output_window(self) -> None:
+        """Create the output window, help panel, and Maya command browser."""
         self.output_window = TextEdit(
             parent=self, read_only=True, show_line_numbers=False
         )
         self.update_fonts.connect(self.output_window.set_editor_fonts)
         self.update_fonts.emit(self.font)
-        #  create a splitter for the help / output
+
         self.output_splitter = QSplitter()
         self.output_splitter.addWidget(self.output_window)
 
-        # add the help section and wire up
         self.help_frame = QFrame()
         grid_layout = QGridLayout()
         grid_layout.setObjectName("grid_layout")
@@ -632,35 +681,47 @@ class EditorDialogCore(QDialog):
 
         self.label = QLabel("Help")
         grid_layout.addWidget(self.label, 0, 0, 1, 1)
+
         self.search_help = QLineEdit(self.help_frame)
         self.search_help.setObjectName("search_help")
-        self.search_help.setToolTip("type to search maya.cmds helps ")
+        self.search_help.setToolTip("type to search maya.cmds help")
         grid_layout.addWidget(self.search_help, 0, 1, 1, 1)
 
         self.help_output_window = TextEdit(
             parent=self.help_frame, read_only=True, show_line_numbers=False
         )
         grid_layout.addWidget(self.help_output_window, 1, 0, 3, 3)
+
         self.output_splitter.addWidget(self.help_frame)
         self.ui.output_window_layout.addWidget(self.output_splitter)
+
         self.maya_cmds = cmds.help("[a-z]*", list=True, lng="Python")
         for c in self.maya_cmds:
             self.help_items.addItem(c)
         self.help_items.currentIndexChanged.connect(self.run_maya_help)
         self.search_help.returnPressed.connect(self.search_maya_help)
+
         completer = QCompleter(self.maya_cmds)
         self.search_help.setCompleter(completer)
 
     @Slot(int)
     def run_maya_help(self, index: int) -> None:
+        """Display help for the selected Maya command.
+
+        Parameters
+        ----------
+        index : int
+            Index of the selected command in the combo box.
+        """
         command = self.help_items.currentText()
         output = cmds.help(command, language="python")
         output = output.strip("\n")
         self.help_output_window.clear()
         self.help_output_window.appendPlainText(output)
 
-    @Slot(int)
+    @Slot()
     def search_maya_help(self) -> None:
+        """Display help for the Maya command entered in the search field."""
         help_text = self.search_help.text()
         if help_text in self.maya_cmds:
             output = cmds.help(help_text, language="python")
@@ -668,7 +729,14 @@ class EditorDialogCore(QDialog):
             self.help_output_window.clear()
             self.help_output_window.appendPlainText(output)
 
-    def connect_editor_slots(self, editor):
+    def connect_editor_slots(self, editor: TextEdit) -> None:
+        """Connect the standard signals for an editor widget.
+
+        Parameters
+        ----------
+        editor : TextEdit
+            The editor widget to wire up.
+        """
         editor.update_output.connect(self.output_window.append_plain_text)
         editor.update_output_html.connect(self.output_window.append_html)
         editor.draw_line.connect(self.output_window.append_line)
@@ -676,49 +744,66 @@ class EditorDialogCore(QDialog):
         self.toggle_line_numbers.connect(editor.toggle_line_number)
 
     @Slot(int)
-    def change_active_model(self, index):
+    def change_active_model(self, index: int) -> None:
+        """Switch the active sidebar model.
+
+        Parameters
+        ----------
+        index : int
+            0 = workspace, 1 = file-system, 2 = code outline.
+        """
         self.sidebar_models.change_active_model(index)
-        if index == 0:  # workspace files
+        if index == 0:
             self.ui.sidebar_treeview.setModel(self.sidebar_models.workspace)
             self.ui.sidebar_treeview.setHeaderHidden(True)
-        elif index == 1:  # filesystem mode
-
-            self.ui.sidebar_treeview.setModel(self.sidebar_models.file_system_model)
+        elif index == 1:
+            self.ui.sidebar_treeview.setModel(
+                self.sidebar_models.file_system_model
+            )
             self.ui.sidebar_treeview.setHeaderHidden(False)
-
             self.ui.sidebar_treeview.setRootIndex(
                 self.sidebar_models.file_system_model.index(QDir.currentPath())
             )
-        elif index == 2:  # Code Outline
-            self.ui.sidebar_treeview.setModel(self.sidebar_models.code_system_model)
+        elif index == 2:
+            self.ui.sidebar_treeview.setModel(
+                self.sidebar_models.code_system_model
+            )
             self.sidebar_models.generate_code_model()
             self.ui.sidebar_treeview.setHeaderHidden(True)
 
+
 class EditorDialog(MayaQWidgetDockableMixin, EditorDialogCore):
-    def __init__(self):
-        super(EditorDialog, self).__init__()
+    """Maya dockable editor dialog. Uses MayaQWidgetDockableMixin for docking."""
+
+    def __init__(self) -> None:
+        """Construct and show the dockable editor."""
+        super().__init__()
         self.show(dockable=True)
 
+
 class EditorDialogStandalone(EditorDialogCore):
-    def __init__(self):
+    """Standalone (non-Maya) editor dialog."""
+
+    def __init__(self) -> None:
+        """Construct and show the standalone editor."""
         EditorDialogCore.__init__(self)
         self.show()
 
     def load_settings(self) -> None:
         """Override load_settings for standalone mode.
 
-        QSettings.value() is unreliable in Maya standalone due to PySide6
-        enum dispatch bugs. Restore splitter state safely and fall back to
-        hardcoded font defaults rather than crashing.
+        QSettings.value() is unreliable in Maya standalone due to PySide6 enum
+        dispatch bugs. Restore splitter state safely and fall back to hardcoded
+        font defaults rather than crashing.
         """
         try:
             splitter_settings = self.settings.value("splitter")
-            self.ui.editor_splitter.restoreState(splitter_settings)  # type: ignore
+            self.ui.editor_splitter.restoreState(splitter_settings)
         except Exception:
             pass
         try:
             splitter_settings = self.settings.value("vertical_splitter")
-            self.ui.vertical_splitter.restoreState(splitter_settings)  # type: ignore
+            self.ui.vertical_splitter.restoreState(splitter_settings)
         except Exception:
             pass
         try:
@@ -727,10 +812,10 @@ class EditorDialogStandalone(EditorDialogCore):
             self.resize(QSize(1024, 720))
         try:
             workspace = self.settings.value("workspace")
-            self.load_workspace_to_editor(workspace)
+            if workspace:
+                self.load_workspace_to_editor(workspace)
         except Exception:
             pass
 
         self.font = QFont("Courier New", 12, 50, False)
         self.update_fonts.emit(self.font)
-

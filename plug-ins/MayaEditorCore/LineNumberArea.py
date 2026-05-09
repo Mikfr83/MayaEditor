@@ -12,33 +12,49 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""Line number area widget rendered alongside the editor."""
 
-from PySide6.QtCore import *
-from PySide6.QtGui import *
+from typing import TYPE_CHECKING
+
+from PySide6.QtCore import QEvent, QSize
+from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QWidget
 
+if TYPE_CHECKING:
+    from .TextEdit import TextEdit
 
-# Based on the Qt Editor Demo
+
 class LineNumberArea(QWidget):
-    """Simple LineNumberArea class to render line numbers at the side of our editor."""
+    """Widget that renders line numbers at the side of a TextEdit editor."""
 
-    def __init__(self, editor):
-        """Create a new LineNumberArea for our Editor.
+    def __init__(self, editor: "TextEdit") -> None:
+        """Create a new LineNumberArea for the given editor.
 
-        Parameters :
-        editor (TextEdit) : The editor to add line numbers to
+        Parameters
+        ----------
+        editor : TextEdit
+            The editor to which this line number area belongs.
         """
         super().__init__(editor)
-        self.code_editor = editor
+        self.code_editor: "TextEdit" = editor
 
     def sizeHint(self) -> QSize:
-        """Get the current size of the area.
+        """Return the preferred size of the line number area.
 
-        Returns (QSize) : the sizeHint for the area
+        Returns
+        -------
+        QSize
+            Width calculated from the editor's line number area width.
         """
         return QSize(self.code_editor.line_number_area_width(), 0)
 
     def paintEvent(self, event: QEvent) -> None:
-        """Override the paint event to allow number drawing."""
+        """Paint line numbers by delegating to the editor's paint handler.
+
+        Parameters
+        ----------
+        event : QEvent
+            The paint event to process.
+        """
         self.code_editor.lineNumberAreaPaintEvent(event)
 
