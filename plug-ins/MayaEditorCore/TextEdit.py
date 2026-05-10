@@ -24,7 +24,6 @@ from PySide6.QtCore import QEvent, QObject, QRect, Qt, Signal, Slot
 from PySide6.QtGui import (
     QColor,
     QFont,
-    QFontMetrics,
     QFontMetricsF,
     QPaintEvent,
     QPainter,
@@ -130,7 +129,6 @@ class TextEdit(QPlainTextEdit):
         font : QFont
             The font to apply.
         """
-        metrics = QFontMetrics(font)
         self.setTabStopDistance(
             QFontMetricsF(self.font()).horizontalAdvance(" ") * self.tab_size
         )
@@ -315,7 +313,6 @@ class TextEdit(QPlainTextEdit):
     def append_line(self) -> None:
         """Append a horizontal separator line to the output."""
         self.moveCursor(QTextCursor.End)
-        cursor = self.textCursor()
         self.appendHtml("<hr>")
 
     def line_number_area_width(self) -> int:

@@ -158,7 +158,6 @@ class MainWindow(QMainWindow):
     def save_maya_scene(self) -> None:
         """Save the current Maya scene."""
         if self.filename == "untitled.ma":
-            filename = self.get_file_name()
             cmds.file(rename=self.filename)
         if self.is_saved:
             self.save()
@@ -166,7 +165,6 @@ class MainWindow(QMainWindow):
     def save_maya_scene_as(self) -> None:
         """Save the current Maya scene with a new name."""
         if self.filename == "untitled.ma":
-            filename = self.get_file_name()
             cmds.file(rename=self.filename)
             self.save()
 

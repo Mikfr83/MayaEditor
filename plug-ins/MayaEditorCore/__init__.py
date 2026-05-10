@@ -4,4 +4,4 @@ Re-exports :class:`EditorDialog`, :class:`EditorDialogCore`, and
 :class:`EditorDialogStandalone` from :mod:`.EditorDialog`.
 """
 
-from .EditorDialog import *
+from .EditorDialog import *  # noqa: F403

@@ -32,16 +32,15 @@ try:
 except RuntimeError:
     root_path = os.path.dirname(os.path.abspath(__file__)).replace("/plug-ins", "")
 
+sys.path.insert(0, root_path + "/plug-ins")
 try:
-    import importlib
+    print("deleting MayaEditorCore")
+    del sys.modules["MayaEditorCore"]
+except KeyError:
+    pass
 
-    sys.path.insert(0, root_path + "/plug-ins")
-    try:
-        print("deleting MayaEditorCore")
-        del sys.modules["MayaEditorCore"]
-        import MayaEditorCore
-    except Exception:
-        import MayaEditorCore
+try:
+    import MayaEditorCore  # noqa: F401
 except ImportError:
     OpenMaya.MGlobal.displayError("Trouble importing MayaEditorCore Module")
     raise
