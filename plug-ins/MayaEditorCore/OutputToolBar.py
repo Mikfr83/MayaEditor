@@ -13,10 +13,11 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """Output toolbar with clear, copy, save and help controls."""
+
 from typing import Any, Optional
 
 import maya.cmds as cmds
-from PySide6.QtCore import QObject, Slot
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,

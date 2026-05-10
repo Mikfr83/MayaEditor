@@ -17,6 +17,7 @@
 Load the MayaEditorCore package and provide a dockable script editor that
 replaces the built-in Script Editor.
 """
+
 import os
 import sys
 from builtins import int
@@ -25,13 +26,6 @@ from typing import Any, Optional
 import maya.api.OpenMaya as OpenMaya
 import maya.api.OpenMayaUI as OpenMayaUI
 import maya.cmds as cmds
-import maya.mel as mel
-from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
-from PySide6 import QtCore, QtWidgets
-from PySide6.QtCore import QFile
-from PySide6.QtGui import QColor, QFont
-from PySide6.QtUiTools import QUiLoader
-from shiboken6 import wrapInstance  # type: ignore
 
 try:
     root_path = cmds.moduleInfo(path=True, moduleName="MayaEditor")
@@ -87,12 +81,8 @@ def MayaEditorUIScript(restore: bool = False) -> Optional[Any]:
             raise
 
     if restore:
-        mixinPtr = OpenMayaUI.MQtUtil.findControl(
-            MayaEditorMixinWindow.objectName()
-        )
-        OpenMayaUI.MQtUtil.addWidgetToMayaLayout(
-            int(mixinPtr), int(restoredControl)
-        )
+        mixinPtr = OpenMayaUI.MQtUtil.findControl(MayaEditorMixinWindow.objectName())
+        OpenMayaUI.MQtUtil.addWidgetToMayaLayout(int(mixinPtr), int(restoredControl))
     else:
         MayaEditorMixinWindow.show(
             dockable=True,

@@ -13,16 +13,16 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """Syntax highlighter for Python source code."""
+
 from typing import Any, Dict, List, Tuple
 
 import maya.cmds as cmds
-from PySide6.QtCore import QRegularExpression, Qt
+from PySide6.QtCore import QRegularExpression
 from PySide6.QtGui import (
     QBrush,
     QColor,
     QFont,
     QSyntaxHighlighter,
-    QTextBlockUserData,
     QTextCharFormat,
 )
 
@@ -81,19 +81,66 @@ class PythonHighlighter(QSyntaxHighlighter):
     """QSyntaxHighlighter for Python with keyword, operator, string and comment rules."""
 
     keywords: List[str] = [
-        "and", "assert", "break", "class", "continue", "def",
-        "del", "elif", "else", "except", "exec", "finally", "for", "from",
-        "global", "if", "import", "in", "is", "lambda", "not", "or", "pass",
-        "print", "raise", "return", "try", "while", "yield", "None",
-        "True", "False",
+        "and",
+        "assert",
+        "break",
+        "class",
+        "continue",
+        "def",
+        "del",
+        "elif",
+        "else",
+        "except",
+        "exec",
+        "finally",
+        "for",
+        "from",
+        "global",
+        "if",
+        "import",
+        "in",
+        "is",
+        "lambda",
+        "not",
+        "or",
+        "pass",
+        "print",
+        "raise",
+        "return",
+        "try",
+        "while",
+        "yield",
+        "None",
+        "True",
+        "False",
     ]
 
     operators: List[str] = [
         "=",
-        "==", "!=", "<", "<=", "[^>]>", ">=",
-        "\\+", "-", "\\*", "/", "//", "\\%", "\\*\\*",
-        "\\+=", "-=", "\\*=", "/=", "\\%=",
-        "\\^", "\\|", "\\&", "\\~", "[^>]>>", "<<",
+        "==",
+        "!=",
+        "<",
+        "<=",
+        "[^>]>",
+        ">=",
+        "\\+",
+        "-",
+        "\\*",
+        "/",
+        "//",
+        "\\%",
+        "\\*\\*",
+        "\\+=",
+        "-=",
+        "\\*=",
+        "/=",
+        "\\%=",
+        "\\^",
+        "\\|",
+        "\\&",
+        "\\~",
+        "[^>]>>",
+        "<<",
     ]
 
     braces: List[str] = ["\\{", "\\}", "\\(", "\\)", "\\[", "\\]"]
@@ -123,10 +170,14 @@ class PythonHighlighter(QSyntaxHighlighter):
             "maya": _create_format("SpringGreen"),
         }
         self.tri_single: Tuple[QRegularExpression, int, QTextCharFormat] = (
-            QRegularExpression("'''"), 1, self.styles["string2"],
+            QRegularExpression("'''"),
+            1,
+            self.styles["string2"],
         )
         self.tri_double: Tuple[QRegularExpression, int, QTextCharFormat] = (
-            QRegularExpression('"""'), 2, self.styles["string2"],
+            QRegularExpression('"""'),
+            2,
+            self.styles["string2"],
         )
 
         rules: List[Tuple[str, int, QTextCharFormat]] = []

@@ -13,15 +13,14 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """Python editor widget extending TextEdit with highlighting, AST code model and execution."""
-import ast
+
 import ast
 from collections import namedtuple
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional
 
 from maya import utils
 from PySide6.QtCore import QEvent, QObject, Qt, Signal
-from PySide6.QtGui import QCompleter, QFont, QKeyEvent, QTextCursor
-from PySide6.QtWidgets import QFileDialog, QWidget
+from PySide6.QtWidgets import QCompleter, QFileDialog
 
 from .PythonHighlighter import PythonHighlighter
 from .TextEdit import TextEdit
@@ -218,7 +217,9 @@ class PythonTextEdit(TextEdit):
         for node in node_to_traverse.body:
             if isinstance(node, ast.ClassDef):
                 is_class = True
-                cls_entry: Dict[Any, List[Any]] = {class_model_data(node.name, node.lineno): []}
+                cls_entry: Dict[Any, List[Any]] = {
+                    class_model_data(node.name, node.lineno): []
+                }
                 current_object.append(cls_entry)
                 self.extract_classes_and_functions(
                     node,

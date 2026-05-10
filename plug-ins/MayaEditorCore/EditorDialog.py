@@ -17,6 +17,7 @@
 This is the main dialog class where all child widgets are created and managed.
 It can work standalone or as a Maya dockable plugin mixin.
 """
+
 from pathlib import Path
 from typing import Any, Optional
 
@@ -25,33 +26,29 @@ import maya.cmds as cmds
 import maya.OpenMayaUI as omui
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
-from PySide6.QtCore import QDir, QEvent, QKeyEvent, QSettings, QSize, Qt, Signal, Slot
+from PySide6.QtCore import QDir, QSettings, QSize, Qt, Signal, Slot
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
-    QCompleter,
     QFont,
     QIcon,
+    QKeyEvent,
     QKeySequence,
-    QTextCursor,
 )
-from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (
     QComboBox,
+    QCompleter,
     QDialog,
     QFileDialog,
     QFontDialog,
     QFrame,
     QGridLayout,
-    QGroupBox,
     QLabel,
     QLineEdit,
     QMenu,
     QMenuBar,
     QMessageBox,
-    QPushButton,
     QSplitter,
-    QWidget,
 )
 
 from shiboken6 import wrapInstance  # type: ignore
@@ -231,9 +228,7 @@ class EditorDialogCore(QDialog):
             f'<b><p style="color:yellow">Debug :</p></b><p>{message}</p>'
         )
 
-    def message_callback(
-        self, message: str, mtype: int, client_data: Any
-    ) -> None:
+    def message_callback(self, message: str, mtype: int, client_data: Any) -> None:
         """Callback for Maya command output to route messages to the output window.
 
         Parameters
@@ -357,9 +352,7 @@ class EditorDialogCore(QDialog):
         )
         show_sidebar_action.setCheckable(True)
         show_sidebar_action.setChecked(True)
-        show_sidebar_action.setShortcut(
-            QKeySequence(Qt.ControlModifier | Qt.Key_0)
-        )
+        show_sidebar_action.setShortcut(QKeySequence(Qt.ControlModifier | Qt.Key_0))
 
         self.menu_bar.addMenu(settings_menu)
         self.ui.main_grid_layout.setMenuBar(self.menu_bar)
@@ -499,8 +492,8 @@ class EditorDialogCore(QDialog):
         if not path.is_file():
             self.output_window.appendHtml(
                 f'<b><p style="color:red">Error :</p></b><p>'
-                f'Problem loading file {code_file_name} from project '
-                f'perhaps it has been removed</p>'
+                f"Problem loading file {code_file_name} from project "
+                f"perhaps it has been removed</p>"
             )
             return
 
@@ -757,17 +750,13 @@ class EditorDialogCore(QDialog):
             self.ui.sidebar_treeview.setModel(self.sidebar_models.workspace)
             self.ui.sidebar_treeview.setHeaderHidden(True)
         elif index == 1:
-            self.ui.sidebar_treeview.setModel(
-                self.sidebar_models.file_system_model
-            )
+            self.ui.sidebar_treeview.setModel(self.sidebar_models.file_system_model)
             self.ui.sidebar_treeview.setHeaderHidden(False)
             self.ui.sidebar_treeview.setRootIndex(
                 self.sidebar_models.file_system_model.index(QDir.currentPath())
             )
         elif index == 2:
-            self.ui.sidebar_treeview.setModel(
-                self.sidebar_models.code_system_model
-            )
+            self.ui.sidebar_treeview.setModel(self.sidebar_models.code_system_model)
             self.sidebar_models.generate_code_model()
             self.ui.sidebar_treeview.setHeaderHidden(True)
 

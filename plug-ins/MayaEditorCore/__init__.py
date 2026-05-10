@@ -3,4 +3,5 @@
 Re-exports :class:`EditorDialog`, :class:`EditorDialogCore`, and
 :class:`EditorDialogStandalone` from :mod:`.EditorDialog`.
 """
+
 from .EditorDialog import *

@@ -17,11 +17,11 @@
 Manages the list of files associated with a workspace, and handles saving
 / loading workspace data in JSON format.
 """
+
 import json
 from pathlib import Path
 from typing import List
 
-from PySide6.QtCore import QDir
 from PySide6.QtWidgets import QInputDialog, QLineEdit, QMessageBox
 
 

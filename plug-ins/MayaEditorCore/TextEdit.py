@@ -17,32 +17,26 @@
 This is the base class for all editor text edits, providing line numbers,
 find/replace, zoom, and common signal wiring.
 """
-from typing import Any, Callable, Optional
 
-import maya.api.OpenMaya as OpenMaya
-from maya import utils
-from PySide6.QtCore import QEvent, QObject, QRect, QSize, Qt, Signal, Slot
+from typing import Any, Optional
+
+from PySide6.QtCore import QEvent, QObject, QRect, Qt, Signal, Slot
 from PySide6.QtGui import (
     QColor,
     QFont,
     QFontMetrics,
     QFontMetricsF,
-    QInputEvent,
-    QKeyEvent,
     QPaintEvent,
     QPainter,
     QResizeEvent,
-    QTextCharFormat,
     QTextCursor,
     QTextFormat,
 )
 from PySide6.QtWidgets import (
-    QApplication,
     QFileDialog,
     QInputDialog,
     QPlainTextEdit,
     QTextEdit,
-    QWidget,
 )
 
 from .FindDialog import FindDialog
@@ -393,9 +387,7 @@ class TextEdit(QPlainTextEdit):
             block = self.firstVisibleBlock()
             blockNumber = block.blockNumber()
             top = (
-                self.blockBoundingGeometry(block)
-                .translated(self.contentOffset())
-                .top()
+                self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
             )
             bottom = top + self.blockBoundingRect(block).height()
             height = self.fontMetrics().height()

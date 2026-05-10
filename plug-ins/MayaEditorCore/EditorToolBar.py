@@ -13,11 +13,11 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """Editor toolbar with run, goto and quick-load controls."""
-from pathlib import Path
-from typing import Any, Callable, Optional
 
-from PySide6.QtCore import QObject, Qt
-from PySide6.QtGui import QIcon
+from pathlib import Path
+from typing import Any, Optional
+
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
@@ -83,7 +83,9 @@ class EditorToolBar(QToolBar):
         self.quick_load_edit.setCompleter(completer)
         self.quick_load_edit.setText(root_path)
         self.quick_load_edit.returnPressed.connect(self.quick_load)
-        self.quick_load_edit.inputRejected.connect(lambda x: self.quick_load_edit.clear())
+        self.quick_load_edit.inputRejected.connect(
+            lambda x: self.quick_load_edit.clear()
+        )
         self.addWidget(self.quick_load_edit)
 
     def quick_load(self) -> None:

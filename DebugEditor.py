@@ -22,7 +22,7 @@ Usage
 Run this script from Maya's Script Editor (or source it) after editing any
 ``MayaEditorCore`` module.
 """
-import importlib
+
 import sys
 
 import maya.cmds as cmds

@@ -17,6 +17,7 @@
 Modified from:
 https://stackoverflow.com/questions/27603350/how-do-i-load-children-from-ui-file-in-pyside/27610822#27610822
 """
+
 from typing import Optional
 
 from PySide6 import QtCore, QtUiTools, QtWidgets
@@ -54,7 +55,9 @@ class UiLoader(QtUiTools.QUiLoader):
                 setattr(self._baseinstance, name, widget)
         return widget
 
-    def loadUi(self, uifile: str, baseinstance: Optional[QtWidgets.QWidget] = None) -> QtWidgets.QWidget:
+    def loadUi(
+        self, uifile: str, baseinstance: Optional[QtWidgets.QWidget] = None
+    ) -> QtWidgets.QWidget:
         """Load a .ui file and associate widgets with a base instance.
 
         Parameters

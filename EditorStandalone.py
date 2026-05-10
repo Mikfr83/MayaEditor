@@ -3,19 +3,17 @@
 
 Requires ``maya.standalone.initialize()`` before importing ``maya.cmds``.
 """
+
 import os
 import sys
-from contextlib import redirect_stdout
 from typing import Optional
 
 sys.path.insert(0, os.getcwd() + "/plug-ins/")
 
-import importlib.util
-import io
 
 import maya.standalone
-from PySide6.QtCore import QCoreApplication, QEvent, QKeyEvent, QObject, Qt, Signal
-from PySide6.QtGui import QResizeEvent
+from PySide6.QtCore import QCoreApplication, QObject, Qt, Signal
+from PySide6.QtGui import QKeyEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -238,8 +236,6 @@ if __name__ == "__main__":
     maya.standalone.initialize(name="python")
 
     import maya.cmds as cmds
-    import maya.OpenMayaUI as omui
-    from shiboken6 import wrapInstance  # type: ignore
 
     root_path = cmds.moduleInfo(path=True, moduleName="MayaEditor")
     sys.path.insert(0, root_path + "/plug-ins")

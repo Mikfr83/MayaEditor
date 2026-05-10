@@ -1,14 +1,15 @@
 """Sidebar model classes for workspace, file-system and code-outline views."""
+
 import os as os_module
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any
 
-from PySide6.QtCore import Qt, QObject, QStandardItemModel, Slot
-from PySide6.QtGui import QIcon, QStandardItem
+from PySide6.QtCore import Qt, QObject, Slot
+from PySide6.QtGui import QIcon, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QFileSystemModel
 
 from .MelTextEdit import MelTextEdit
-from .PythonTextEdit import PythonTextEdit, class_model_data, code_model_data
+from .PythonTextEdit import PythonTextEdit, code_model_data
 
 
 class SideBarModels(QObject):
@@ -50,7 +51,9 @@ class SideBarModels(QObject):
         sep = "\\" if os_module.name == "nt" else "/"
         self.class_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}class.png")
         self.method_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}method.png")
-        self.function_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}function.png")
+        self.function_icon = QIcon(
+            f"{root_path}{sep}plug-ins{sep}icons{sep}function.png"
+        )
         self.proc_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}proc.png")
         self.global_icon = QIcon(f"{root_path}{sep}plug-ins{sep}icons{sep}global.png")
 

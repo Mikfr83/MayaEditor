@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """Install the MayaEditor module into the Maya modules directory."""
-import argparse
+
 import os
 import platform
 import sys

@@ -13,14 +13,14 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """MEL editor widget extending TextEdit with syntax highlighting and execution."""
-from collections import namedtuple
-from typing import Any, Callable, List, Optional, Type
 
-import maya.api.OpenMaya as OpenMaya
+from collections import namedtuple
+from typing import Any, List, Optional
+
 import maya.mel as mel
 from PySide6.QtCore import QEvent, QObject, Qt, Signal
-from PySide6.QtGui import QFont, QKeyEvent, QTextCursor
-from PySide6.QtWidgets import QFileDialog, QWidget
+from PySide6.QtGui import QTextCursor
+from PySide6.QtWidgets import QFileDialog
 
 from .MelHighlighter import MelHighlighter
 from .TextEdit import TextEdit
