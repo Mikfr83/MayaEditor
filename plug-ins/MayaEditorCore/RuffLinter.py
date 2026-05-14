@@ -96,6 +96,21 @@ class _RuffWorker(QObject):
         self._pending_filename: str = "untitled.py"
         self._mutex = QMutex()
 
+    @Slot(str)
+    def set_executable(self, path: str) -> None:
+        """Update the ruff executable path (called on the worker thread).
+
+        Also resets the missing-warned flag so a newly configured path is
+        tried even if a previous run already failed.
+
+        Parameters
+        ----------
+        path : str
+            Absolute path to the ruff binary.
+        """
+        self._ruff_exe = path
+        _RuffWorker._ruff_missing_warned = False
+
     # Called from main thread via queued connection
     @Slot(str, str)
     def run_lint(self, source: str, filename: str) -> None:
@@ -177,8 +192,10 @@ class RuffLinter(QObject):
 
     diagnostics_ready = Signal(list)  # List[Diagnostic]
 
-    # Internal signal to push work to the worker thread (queued connection)
+    # Internal signals — all cross-thread calls go through these so Qt
+    # delivers them on the worker thread via queued connections.
     _request_lint = Signal(str, str)
+    _request_set_exe = Signal(str)
 
     def __init__(
         self,
@@ -191,11 +208,24 @@ class RuffLinter(QObject):
         self._worker = _RuffWorker(ruff_executable)
         self._worker.moveToThread(self._thread)
 
-        # Wire signals
+        # Wire signals (auto-queued because worker is on a different thread)
         self._request_lint.connect(self._worker.run_lint)
+        self._request_set_exe.connect(self._worker.set_executable)
         self._worker.diagnostics_ready.connect(self.diagnostics_ready)
 
         self._thread.start()
+
+    def set_executable(self, path: str) -> None:
+        """Update the ruff binary path on the worker thread.
+
+        Safe to call from the main thread at any time.
+
+        Parameters
+        ----------
+        path : str
+            Absolute path to the ruff binary.
+        """
+        self._request_set_exe.emit(path)
 
     def lint(self, source: str, filename: str = "untitled.py") -> None:
         """Request a lint run for *source*.

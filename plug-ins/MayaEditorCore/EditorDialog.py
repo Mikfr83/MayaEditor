@@ -439,12 +439,15 @@ class EditorDialogCore(QDialog):
         )
         if path:
             self.settings.setValue("ruff_executable", path)
-            # Update every open Python editor
+            self._ruff_executable = path
+            # Update every open Python editor via thread-safe signal and
+            # immediately re-run the linter so the user sees results right away.
             tab = self.ui.editor_tab
             for i in range(tab.count()):
                 editor = tab.widget(i)
                 if isinstance(editor, PythonTextEdit):
-                    editor._linter._worker._ruff_exe = path
+                    editor._linter.set_executable(path)
+                    editor._run_linter()
 
     def open_file(self) -> None:
         """Show a file-open dialog and load the selected file into a new tab."""
@@ -469,7 +472,7 @@ class EditorDialogCore(QDialog):
             parent=self,
         )
         if hasattr(self, "_ruff_executable") and self._ruff_executable:
-            editor._linter._worker._ruff_exe = self._ruff_executable
+            editor._linter.set_executable(self._ruff_executable)
         self.connect_editor_slots(editor)
         self.ui.editor_tab.insertTab(0, editor, "untitled.py")
         self.ui.editor_tab.setCurrentIndex(0)
@@ -643,7 +646,7 @@ class EditorDialogCore(QDialog):
                 editor.set_editor_fonts(self.font)
 
             if path.suffix == ".py" and hasattr(self, "_ruff_executable") and self._ruff_executable:
-                editor._linter._worker._ruff_exe = self._ruff_executable
+                editor._linter.set_executable(self._ruff_executable)
 
             if path.suffix in (".mel", ".py"):
                 self.tool_bar.add_to_active_file_list(short_name)
@@ -756,7 +759,7 @@ class EditorDialogCore(QDialog):
             parent=self.ui.editor_tab,
         )
         if hasattr(self, "_ruff_executable") and self._ruff_executable:
-            editor._linter._worker._ruff_exe = self._ruff_executable
+            editor._linter.set_executable(self._ruff_executable)
         self.connect_editor_slots(editor)
         self.ui.editor_tab.insertTab(0, editor, self.python_icon, "Python live_window")
         self.ui.editor_tab.setCurrentIndex(0)
