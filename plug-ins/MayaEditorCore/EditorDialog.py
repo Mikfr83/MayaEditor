@@ -381,6 +381,9 @@ class EditorDialogCore(QDialog):
                 self.ui.sidebar_treeview.setRootIndex(
                     self.sidebar_models.file_system_model.index(directory)
                 )
+            if self.workspace.file_name:
+                self.workspace.root = directory
+                self.workspace.is_saved = False
 
     def open_file(self) -> None:
         """Show a file-open dialog and load the selected file into a new tab."""
@@ -584,6 +587,13 @@ class EditorDialogCore(QDialog):
         if self.workspace.load(file_name):
             for code_file_name in self.workspace.files:
                 self.create_editor_and_load_files(code_file_name)
+            if self.workspace.root:
+                self.file_system_root = self.workspace.root
+                self.sidebar_models.file_system_model.setRootPath(self.workspace.root)
+                if self.ui.sidebar_selector.currentIndex() == 1:
+                    self.ui.sidebar_treeview.setRootIndex(
+                        self.sidebar_models.file_system_model.index(self.workspace.root)
+                    )
         self.workspace.is_saved = True
 
     @Slot()

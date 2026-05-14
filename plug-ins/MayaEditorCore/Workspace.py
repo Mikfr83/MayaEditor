@@ -34,6 +34,7 @@ class Workspace:
         self.files: List[str] = []
         self.is_saved: bool = True
         self.file_name: str = ""
+        self.root: str = ""
 
     def add_file(self, file: str) -> None:
         """Add a file path to the workspace if not already present.
@@ -73,7 +74,7 @@ class Workspace:
         filename : str
             Full path where the workspace file will be written.
         """
-        workspace = {"name": self.workspace_name, "files": self.files}
+        workspace = {"name": self.workspace_name, "files": self.files, "root": self.root}
         with open(filename, "w") as workspace_file:
             json.dump(workspace, indent=4, fp=workspace_file)
         self.is_saved = True
@@ -100,12 +101,14 @@ class Workspace:
                     workspace = json.load(workspace_file)
                     self.name = workspace["name"]
                     self.files = workspace["files"]
+                    self.root = workspace.get("root", "")
                     return True
             except Exception:
                 print("problem loading last workspace")
                 self.name = ""
                 self.files = []
                 self.file_name = ""
+                self.root = ""
                 return False
         else:
             return False
@@ -123,6 +126,7 @@ class Workspace:
                 self.files.clear()
                 self.name = text
                 self.file_name = ""
+                self.root = ""
                 self.is_saved = False
 
     def check_saved(self) -> bool:
