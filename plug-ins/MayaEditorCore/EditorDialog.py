@@ -120,6 +120,7 @@ class EditorDialogCore(QDialog):
             self.message_callback, ""
         )
         self.settings = QSettings("NCCA", "NCCA_Maya_Editor")
+        self._ruff_executable: str = ""  # overwritten by load_settings
         self.file_system_root: str = QDir.currentPath()
         self.root_path: str = cmds.moduleInfo(path=True, moduleName="MayaEditor")
         self.python_icon = QIcon(":/icons/python.png")
@@ -191,6 +192,14 @@ class EditorDialogCore(QDialog):
                 self.resize(QSize(1024, 720))
         except Exception:
             self.resize(QSize(1024, 720))
+        # Load ruff executable BEFORE loading workspace files so that any
+        # editors created during workspace restore already have the correct path.
+        try:
+            ruff_exe = self.settings.value("ruff_executable")
+            self._ruff_executable = str(ruff_exe) if ruff_exe else ""
+        except Exception:
+            self._ruff_executable = ""
+
         try:
             workspace = self.settings.value("workspace")
             if workspace:
@@ -217,15 +226,6 @@ class EditorDialogCore(QDialog):
 
         self.font = QFont(name, size, weight, italic)
         self.update_fonts.emit(self.font)
-
-        try:
-            ruff_exe = self.settings.value("ruff_executable")
-            if ruff_exe:
-                self._ruff_executable = str(ruff_exe)
-            else:
-                self._ruff_executable = ""
-        except Exception:
-            self._ruff_executable = ""
 
     def save_settings(self) -> None:
         """Save current editor settings to QSettings."""
