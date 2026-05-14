@@ -210,7 +210,7 @@ class TextEdit(QPlainTextEdit):
         """
         if event.type() == QEvent.Wheel:
             if event.modifiers() == Qt.ControlModifier:
-                if event.delta() > 0:
+                if event.angleDelta().y() > 0:
                     self.zoomIn(1)
                 else:
                     self.zoomOut(1)

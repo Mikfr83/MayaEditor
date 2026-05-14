@@ -26,6 +26,7 @@ from typing import Any, Optional
 import maya.api.OpenMaya as OpenMaya
 import maya.api.OpenMayaUI as OpenMayaUI
 import maya.cmds as cmds
+import maya.mel as mel
 
 try:
     root_path = cmds.moduleInfo(path=True, moduleName="MayaEditor")
@@ -122,9 +123,7 @@ class MayaEditor(OpenMaya.MPxCommand):
         ui = MayaEditorUIScript()
         if ui is not None:
             try:
-                cmds.workspaceControl(
-                    "MayaEditorWorkspaceControl", e=True, restore=True
-                )
+                cmds.workspaceControl("MayaEditorWorkspaceControl", e=True, restore=True)
             except Exception:
                 pass
         return ui
@@ -138,7 +137,7 @@ class MayaEditor(OpenMaya.MPxCommand):
         MayaEditor
             A new instance of the command.
         """
-        return MayaEditor()
+        return cls()
 
     @classmethod
     def cleanup(cls) -> None:
@@ -162,10 +161,31 @@ def initializePlugin(plugin: Any) -> None:
     plugin_fn = OpenMaya.MFnPlugin(plugin, vendor, version)
     try:
         plugin_fn.registerCommand(MayaEditor.CMD_NAME, MayaEditor.creator)
+        cmds.evalDeferred("cmds.MayaEditor()")
+        mel.eval("""
+                global proc ScriptEditor() {
+                    python("cmds.MayaEditor()");
+                }
+            """)
     except Exception:
-        OpenMaya.MGlobal.displayError(
-            f"Failed to register command: {MayaEditor.CMD_NAME}"
-        )
+        OpenMaya.MGlobal.displayError(f"Failed to register command: {MayaEditor.CMD_NAME}")
+
+
+SCRIPT_EDITOR_PROC = """
+global proc ScriptEditor()
+{
+    if (`scriptedPanel -q -exists scriptEditorPanel1`)
+    {
+        scriptedPanel -e -tor scriptEditorPanel1;
+        showWindow scriptEditorPanel1Window;
+        selectCurrentExecuterControl;
+    }
+    else
+    {
+        CommandWindow;
+    }
+}
+"""
 
 
 def uninitializePlugin(plugin: Any) -> None:
@@ -180,19 +200,13 @@ def uninitializePlugin(plugin: Any) -> None:
     plugin_fn = OpenMaya.MFnPlugin(plugin)
     try:
         plugin_fn.deregisterCommand(MayaEditor.CMD_NAME)
+
     except Exception:
-        OpenMaya.MGlobal.displayError(
-            f"Failed to deregister command: {MayaEditor.CMD_NAME}"
-        )
+        OpenMaya.MGlobal.displayError(f"Failed to deregister command: {MayaEditor.CMD_NAME}")
+    mel.eval(SCRIPT_EDITOR_PROC)
 
 
 if __name__ == "__main__":
     plugin_name = "MayaEditor.py"
-    cmds.evalDeferred(
-        f'if cmds.pluginInfo("{plugin_name}", q=True, loaded=True): '
-        f'cmds.unloadPlugin("{plugin_name}")'
-    )
-    cmds.evalDeferred(
-        f'if not cmds.pluginInfo("{plugin_name}", q=True, loaded=True): '
-        f'cmds.loadPlugin("{plugin_name}")'
-    )
+    cmds.evalDeferred(f'if cmds.pluginInfo("{plugin_name}", q=True, loaded=True): cmds.unloadPlugin("{plugin_name}")')
+    cmds.evalDeferred(f'if not cmds.pluginInfo("{plugin_name}", q=True, loaded=True): cmds.loadPlugin("{plugin_name}")')
