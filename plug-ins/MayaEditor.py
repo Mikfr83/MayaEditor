@@ -144,6 +144,18 @@ class MayaEditor(OpenMaya.MPxCommand):
         """Delete the editor mixin window and release resources."""
         global MayaEditorMixinWindow
         if MayaEditorMixinWindow is not None:
+            try:
+                MayaEditorMixinWindow.close()
+            except Exception:
+                pass
+            try:
+                cmds.deleteUI(
+                    f"{MayaEditorMixinWindow.objectName()}WorkspaceControl",
+                    control=True,
+                )
+            except Exception:
+                pass
+            MayaEditorMixinWindow.setParent(None)
             MayaEditorMixinWindow.deleteLater()
             MayaEditorMixinWindow = None
 
