@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
     QFontDialog,
     QFrame,
     QGridLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMenu,
@@ -147,6 +148,16 @@ class EditorDialogCore(QDialog):
         self.load_settings()
         self.create_live_editors()
         self.update_fonts.emit(self.font)
+        self.update_window_title()
+
+    def update_window_title(self) -> None:
+        name = self.workspace.workspace_name
+        if name:
+            self.setWindowTitle(f"NCCA Editor - {name}")
+        else:
+            self.setWindowTitle("NCCA Editor")
+        if hasattr(self, "tool_bar"):
+            self.tool_bar.update_workspace_label(name)
 
     def load_settings(self) -> None:
         """Load editor settings from QSettings.
@@ -328,6 +339,12 @@ class EditorDialogCore(QDialog):
         close_workspace.triggered.connect(self.close_workspace)
         workspace_menu.addAction(close_workspace)
 
+        workspace_menu.addSeparator()
+
+        rename_workspace = QAction("Rename Workspace...", self)
+        rename_workspace.triggered.connect(self.rename_workspace)
+        workspace_menu.addAction(rename_workspace)
+
         self.menu_bar.addMenu(workspace_menu)
 
         settings_menu = QMenu("&Settings")
@@ -462,6 +479,7 @@ class EditorDialogCore(QDialog):
         tab = self.ui.editor_tab
         tab.clear()
         self.workspace.new()
+        self.update_window_title()
         if self.ui.sidebar_treeview.model():
             self.ui.sidebar_treeview.model().clear()
         self.create_live_editors()
@@ -488,6 +506,21 @@ class EditorDialogCore(QDialog):
         if self.ui.sidebar_treeview:
             self.ui.sidebar_treeview.clear()
         self.create_live_editors()
+        self.update_window_title()
+
+    def rename_workspace(self) -> None:
+        """Prompt the user to rename the current workspace."""
+        text, ok = QInputDialog.getText(
+            self,
+            "Rename Workspace",
+            "Workspace Name:",
+            QLineEdit.EchoMode.Normal,
+            self.workspace.workspace_name,
+        )
+        if ok and text:
+            self.workspace.workspace_name = text
+            self.workspace.is_saved = False
+            self.update_window_title()
 
     def show_line_numbers(self, state: bool) -> None:
         """Toggle line number visibility in all editors.
@@ -595,6 +628,7 @@ class EditorDialogCore(QDialog):
                         self.sidebar_models.file_system_model.index(self.workspace.root)
                     )
         self.workspace.is_saved = True
+        self.update_window_title()
 
     @Slot()
     def tool_bar_run_clicked(self) -> None:

@@ -99,13 +99,13 @@ class Workspace:
             try:
                 with open(filename, "r") as workspace_file:
                     workspace = json.load(workspace_file)
-                    self.name = workspace["name"]
+                    self.workspace_name = workspace["name"]
                     self.files = workspace["files"]
                     self.root = workspace.get("root", "")
                     return True
             except Exception:
                 print("problem loading last workspace")
-                self.name = ""
+                self.workspace_name = ""
                 self.files = []
                 self.file_name = ""
                 self.root = ""
@@ -124,7 +124,7 @@ class Workspace:
             )
             if ok and text:
                 self.files.clear()
-                self.name = text
+                self.workspace_name = text
                 self.file_name = ""
                 self.root = ""
                 self.is_saved = False
