@@ -458,7 +458,9 @@ class TextEdit(QPlainTextEdit):
             child = child.next()
         return False
 
-    def _fold_region(self, block: "QTextBlock") -> Optional[Tuple["QTextBlock", "QTextBlock"]]:
+    def _fold_region(
+        self, block: "QTextBlock"
+    ) -> Optional[Tuple["QTextBlock", "QTextBlock"]]:
         if not self._is_fold_start(block):
             return None
         level = self._indent_level(block)

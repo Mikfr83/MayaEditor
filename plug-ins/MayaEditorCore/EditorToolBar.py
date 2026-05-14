@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
@@ -99,7 +98,10 @@ class EditorToolBar(QToolBar):
         self.addWidget(self.workspace_label)
 
     def eventFilter(self, obj: object, event: object) -> bool:
-        if obj is self.workspace_label and event.type() == QEvent.Type.MouseButtonDblClick:
+        if (
+            obj is self.workspace_label
+            and event.type() == QEvent.Type.MouseButtonDblClick
+        ):
             if hasattr(self.parent, "rename_workspace"):
                 self.parent.rename_workspace()
             return True

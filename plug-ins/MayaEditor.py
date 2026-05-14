@@ -123,7 +123,9 @@ class MayaEditor(OpenMaya.MPxCommand):
         ui = MayaEditorUIScript()
         if ui is not None:
             try:
-                cmds.workspaceControl("MayaEditorWorkspaceControl", e=True, restore=True)
+                cmds.workspaceControl(
+                    "MayaEditorWorkspaceControl", e=True, restore=True
+                )
             except Exception:
                 pass
         return ui
@@ -180,7 +182,9 @@ def initializePlugin(plugin: Any) -> None:
                 }
             """)
     except Exception:
-        OpenMaya.MGlobal.displayError(f"Failed to register command: {MayaEditor.CMD_NAME}")
+        OpenMaya.MGlobal.displayError(
+            f"Failed to register command: {MayaEditor.CMD_NAME}"
+        )
 
 
 SCRIPT_EDITOR_PROC = """
@@ -214,11 +218,17 @@ def uninitializePlugin(plugin: Any) -> None:
         plugin_fn.deregisterCommand(MayaEditor.CMD_NAME)
 
     except Exception:
-        OpenMaya.MGlobal.displayError(f"Failed to deregister command: {MayaEditor.CMD_NAME}")
+        OpenMaya.MGlobal.displayError(
+            f"Failed to deregister command: {MayaEditor.CMD_NAME}"
+        )
     mel.eval(SCRIPT_EDITOR_PROC)
 
 
 if __name__ == "__main__":
     plugin_name = "MayaEditor.py"
-    cmds.evalDeferred(f'if cmds.pluginInfo("{plugin_name}", q=True, loaded=True): cmds.unloadPlugin("{plugin_name}")')
-    cmds.evalDeferred(f'if not cmds.pluginInfo("{plugin_name}", q=True, loaded=True): cmds.loadPlugin("{plugin_name}")')
+    cmds.evalDeferred(
+        f'if cmds.pluginInfo("{plugin_name}", q=True, loaded=True): cmds.unloadPlugin("{plugin_name}")'
+    )
+    cmds.evalDeferred(
+        f'if not cmds.pluginInfo("{plugin_name}", q=True, loaded=True): cmds.loadPlugin("{plugin_name}")'
+    )

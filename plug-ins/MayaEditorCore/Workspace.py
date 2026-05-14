@@ -74,7 +74,11 @@ class Workspace:
         filename : str
             Full path where the workspace file will be written.
         """
-        workspace = {"name": self.workspace_name, "files": self.files, "root": self.root}
+        workspace = {
+            "name": self.workspace_name,
+            "files": self.files,
+            "root": self.root,
+        }
         with open(filename, "w") as workspace_file:
             json.dump(workspace, indent=4, fp=workspace_file)
         self.is_saved = True
