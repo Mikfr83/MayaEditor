@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from maya import utils
 from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
-from PySide6.QtWidgets import QCompleter, QFileDialog, QToolTip
+from PySide6.QtWidgets import QCompleter, QFileDialog, QTextEdit, QToolTip
 
 from .PythonHighlighter import PythonHighlighter
 from .RuffLinter import Diagnostic, RuffLinter
@@ -364,7 +364,7 @@ class PythonTextEdit(TextEdit):
             # Store tooltip text in the format so it is accessible on hover
             fmt.setToolTip(f"{diag.code}: {diag.message}")
 
-            sel = self.ExtraSelection()
+            sel = QTextEdit.ExtraSelection()
             sel.cursor = cursor
             sel.format = fmt
             selections.append(sel)
