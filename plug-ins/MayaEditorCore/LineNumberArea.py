@@ -16,11 +16,14 @@
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QEvent, QSize
+from PySide6.QtCore import QEvent, QSize, Qt
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QWidget
 
 if TYPE_CHECKING:
     from .TextEdit import TextEdit
+
+FOLD_CLICK_MARGIN = 14
 
 
 class LineNumberArea(QWidget):
@@ -46,6 +49,29 @@ class LineNumberArea(QWidget):
             Width calculated from the editor's line number area width.
         """
         return QSize(self.code_editor.line_number_area_width(), 0)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        fold_start_x = self.code_editor.line_number_area_width() - FOLD_CLICK_MARGIN
+        if event.button() == Qt.LeftButton and event.position().x() >= fold_start_x:
+            block = self.code_editor.firstVisibleBlock()
+            block_number = block.blockNumber()
+            top = (
+                self.code_editor.blockBoundingGeometry(block)
+                .translated(self.code_editor.contentOffset())
+                .top()
+            )
+            bottom = top + self.code_editor.blockBoundingRect(block).height()
+            click_y = event.position().y()
+            while block.isValid():
+                if top <= click_y <= bottom:
+                    if block.isVisible():
+                        self.code_editor.toggle_fold(block_number)
+                    return
+                block = block.next()
+                top = bottom
+                bottom = top + self.code_editor.blockBoundingRect(block).height()
+                block_number += 1
+        super().mousePressEvent(event)
 
     def paintEvent(self, event: QEvent) -> None:
         """Paint line numbers by delegating to the editor's paint handler.

@@ -18,7 +18,7 @@ This is the base class for all editor text edits, providing line numbers,
 find/replace, zoom, and common signal wiring.
 """
 
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 from PySide6.QtCore import QEvent, QObject, QRect, Qt, Signal, Slot
 from PySide6.QtGui import (
@@ -27,6 +27,7 @@ from PySide6.QtGui import (
     QFontMetricsF,
     QPaintEvent,
     QPainter,
+    QPen,
     QResizeEvent,
     QTextCursor,
     QTextFormat,
@@ -40,6 +41,11 @@ from PySide6.QtWidgets import (
 
 from .FindDialog import FindDialog
 from .LineNumberArea import LineNumberArea
+
+if TYPE_CHECKING:
+    from PySide6.QtGui import QTextBlock
+
+FOLD_ICON_WIDTH = 14
 
 
 class TextEdit(QPlainTextEdit):
@@ -107,6 +113,7 @@ class TextEdit(QPlainTextEdit):
             self.cursorPositionChanged.connect(self.highlight_current_line)
         self.needs_saving: bool = False
         self.first_edit: bool = False
+        self._fold_states: dict[int, bool] = {}
         self.textChanged.connect(self.text_changed)
 
     def text_changed(self) -> None:
@@ -119,6 +126,7 @@ class TextEdit(QPlainTextEdit):
             self.first_edit = True
         else:
             self.needs_saving = True
+        self._clear_folds()
 
     @Slot(QFont)
     def set_editor_fonts(self, font: QFont) -> None:
@@ -329,7 +337,7 @@ class TextEdit(QPlainTextEdit):
             count /= 10
             digits += 1
         space = int(self.fontMetrics().averageCharWidth() * digits)
-        return space
+        return space + FOLD_ICON_WIDTH
 
     def update_line_number_area_width(self, _: int) -> None:
         """Update the viewport margins to accommodate the line number area."""
@@ -388,15 +396,28 @@ class TextEdit(QPlainTextEdit):
             )
             bottom = top + self.blockBoundingRect(block).height()
             height = self.fontMetrics().height()
-            width = self.fontMetrics().averageCharWidth()
+            number_area_width = self.line_number_area.width() - FOLD_ICON_WIDTH
             while block.isValid() and (top <= event.rect().bottom()):
                 if block.isVisible() and (bottom >= event.rect().top()):
+                    if self._is_fold_start(block):
+                        is_folded = self._fold_states.get(blockNumber, False)
+                        icon_size = 10
+                        icon_x = number_area_width + (FOLD_ICON_WIDTH - icon_size) // 2
+                        icon_y = top + (height - icon_size) // 2
+                        box = QRect(icon_x, icon_y, icon_size, icon_size)
+                        mypainter.setPen(QPen(QColor(160, 160, 160), 1))
+                        mypainter.setBrush(QColor(60, 60, 60))
+                        mypainter.drawRect(box)
+                        mypainter.setPen(QColor(255, 255, 255))
+                        mypainter.drawText(
+                            box, Qt.AlignCenter, "+" if is_folded else "-"
+                        )
                     number = str(blockNumber + 1) + " "
                     mypainter.setPen(Qt.yellow)
                     mypainter.drawText(
-                        width,
+                        0,
                         top,
-                        self.line_number_area.width(),
+                        number_area_width,
                         height,
                         Qt.AlignRight,
                         number,
@@ -418,6 +439,90 @@ class TextEdit(QPlainTextEdit):
             selection.cursor.clearSelection()
             extraSelections.append(selection)
         self.setExtraSelections(extraSelections)
+
+    def _indent_level(self, block: "QTextBlock") -> int:
+        text = block.text()
+        if not text.strip():
+            return -1
+        return len(text) - len(text.lstrip())
+
+    def _is_fold_start(self, block: "QTextBlock") -> bool:
+        text = block.text().strip()
+        if not text or text.startswith("#") or text.startswith("//"):
+            return False
+        level = self._indent_level(block)
+        child = block.next()
+        while child.isValid():
+            if child.text().strip():
+                return self._indent_level(child) > level
+            child = child.next()
+        return False
+
+    def _fold_region(self, block: "QTextBlock") -> Optional[Tuple["QTextBlock", "QTextBlock"]]:
+        if not self._is_fold_start(block):
+            return None
+        level = self._indent_level(block)
+        first = None
+        last = None
+        child = block.next()
+        while child.isValid():
+            if child.text().strip():
+                child_level = self._indent_level(child)
+                if child_level <= level:
+                    break
+                if first is None:
+                    first = child
+                last = child
+            child = child.next()
+        if first is not None:
+            return (first, last)
+        return None
+
+    @Slot(int)
+    def toggle_fold(self, line_number: int) -> None:
+        block = self.document().findBlockByNumber(line_number)
+        region = self._fold_region(block)
+        if region is None:
+            return
+
+        first, last = region
+        is_folded = self._fold_states.get(line_number, False)
+
+        if is_folded:
+            self._fold_states[line_number] = False
+            child = first
+            while True:
+                child.setVisible(True)
+                if child == last:
+                    break
+                child = child.next()
+        else:
+            self._fold_states[line_number] = True
+            child = first
+            while True:
+                child.setVisible(False)
+                if child == last:
+                    break
+                child = child.next()
+
+        self.document().markContentsDirty(0, self.document().blockCount())
+        self.update_line_number_area(
+            QRect(0, 0, self.line_number_area_width(), self.height()), 0
+        )
+
+    def _clear_folds(self) -> None:
+        if not self._fold_states:
+            return
+        self._fold_states.clear()
+        block = self.document().begin()
+        while block.isValid():
+            if not block.isVisible():
+                block.setVisible(True)
+            block = block.next()
+        self.document().markContentsDirty(0, self.document().blockCount())
+        self.update_line_number_area(
+            QRect(0, 0, self.line_number_area_width(), self.height()), 0
+        )
 
     @Slot(bool)
     def toggle_line_number(self, state: bool) -> None:
