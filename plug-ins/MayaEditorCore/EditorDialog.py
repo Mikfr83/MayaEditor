@@ -30,12 +30,14 @@ from PySide6.QtCore import QDir, QSettings, QSize, Qt, Signal, Slot
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
+    QColor,
     QFont,
     QIcon,
     QKeyEvent,
     QKeySequence,
 )
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QCompleter,
     QDialog,
@@ -43,6 +45,7 @@ from PySide6.QtWidgets import (
     QFontDialog,
     QFrame,
     QGridLayout,
+    QHeaderView,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -50,6 +53,8 @@ from PySide6.QtWidgets import (
     QMenuBar,
     QMessageBox,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
 )
 
 from shiboken6 import wrapInstance  # type: ignore
@@ -137,6 +142,7 @@ class EditorDialogCore(QDialog):
         self.ui.editor_tab.currentChanged.connect(
             self.sidebar_models.code_model_needs_update
         )
+        self.ui.editor_tab.currentChanged.connect(self._on_active_tab_changed)
         self.ui.sidebar_treeview.setHeaderHidden(True)
         self.ui.sidebar_treeview.clicked.connect(self.sidebar_view_changed)
 
@@ -212,6 +218,15 @@ class EditorDialogCore(QDialog):
         self.font = QFont(name, size, weight, italic)
         self.update_fonts.emit(self.font)
 
+        try:
+            ruff_exe = self.settings.value("ruff_executable")
+            if ruff_exe:
+                self._ruff_executable = str(ruff_exe)
+            else:
+                self._ruff_executable = ""
+        except Exception:
+            self._ruff_executable = ""
+
     def save_settings(self) -> None:
         """Save current editor settings to QSettings."""
         self.settings.setValue("splitter", self.ui.editor_splitter.saveState())
@@ -221,6 +236,8 @@ class EditorDialogCore(QDialog):
         self.settings.setValue("size", self.size())
         self.settings.setValue("workspace", self.workspace.file_name)
         self.settings.setValue("file_system_root", self.file_system_root)
+        if hasattr(self, "_ruff_executable"):
+            self.settings.setValue("ruff_executable", self._ruff_executable)
         self.settings.beginGroup("Font")
         self.settings.setValue("font-name", self.font.family())
         self.settings.setValue("font-size", self.font.pointSize())
@@ -357,6 +374,10 @@ class EditorDialogCore(QDialog):
         settings_menu.addAction(set_root_action)
         set_root_action.triggered.connect(self.set_workspace_root)
 
+        set_ruff_action = QAction("Set Ruff Executable...", self)
+        settings_menu.addAction(set_ruff_action)
+        set_ruff_action.triggered.connect(self.set_ruff_executable)
+
         show_line_numbers_action = QAction("Show Line Numbers", self)
         settings_menu.addAction(show_line_numbers_action)
         show_line_numbers_action.toggled.connect(self.show_line_numbers)
@@ -402,6 +423,29 @@ class EditorDialogCore(QDialog):
                 self.workspace.root = directory
                 self.workspace.is_saved = False
 
+    def set_ruff_executable(self) -> None:
+        """Open a file dialog to set a custom path for the ruff executable.
+
+        The chosen path is persisted in QSettings under the key
+        ``"ruff_executable"`` and applied to every Python editor tab that is
+        currently open as well as any subsequently created tab.
+        """
+        current = str(self.settings.value("ruff_executable") or "")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select ruff Executable",
+            current or "/usr/local/bin",
+            "Executable (*)",
+        )
+        if path:
+            self.settings.setValue("ruff_executable", path)
+            # Update every open Python editor
+            tab = self.ui.editor_tab
+            for i in range(tab.count()):
+                editor = tab.widget(i)
+                if isinstance(editor, PythonTextEdit):
+                    editor._linter._worker._ruff_exe = path
+
     def open_file(self) -> None:
         """Show a file-open dialog and load the selected file into a new tab."""
         file_name, _ = QFileDialog.getOpenFileName(
@@ -424,6 +468,9 @@ class EditorDialogCore(QDialog):
             live=False,
             parent=self,
         )
+        if hasattr(self, "_ruff_executable") and self._ruff_executable:
+            editor._linter._worker._ruff_exe = self._ruff_executable
+        self.connect_editor_slots(editor)
         self.ui.editor_tab.insertTab(0, editor, "untitled.py")
         self.ui.editor_tab.setCurrentIndex(0)
         self.ui.editor_tab.widget(0).setFocus()
@@ -595,6 +642,9 @@ class EditorDialogCore(QDialog):
                 icon = self.text_icon
                 editor.set_editor_fonts(self.font)
 
+            if path.suffix == ".py" and hasattr(self, "_ruff_executable") and self._ruff_executable:
+                editor._linter._worker._ruff_exe = self._ruff_executable
+
             if path.suffix in (".mel", ".py"):
                 self.tool_bar.add_to_active_file_list(short_name)
                 editor.code_model_changed.connect(
@@ -705,6 +755,8 @@ class EditorDialogCore(QDialog):
             read_only=False,
             parent=self.ui.editor_tab,
         )
+        if hasattr(self, "_ruff_executable") and self._ruff_executable:
+            editor._linter._worker._ruff_exe = self._ruff_executable
         self.connect_editor_slots(editor)
         self.ui.editor_tab.insertTab(0, editor, self.python_icon, "Python live_window")
         self.ui.editor_tab.setCurrentIndex(0)
@@ -759,6 +811,7 @@ class EditorDialogCore(QDialog):
         grid_layout.addWidget(self.help_output_window, 1, 0, 3, 3)
 
         self.output_splitter.addWidget(self.help_frame)
+        self.create_lint_panel()
         self.ui.output_window_layout.addWidget(self.output_splitter)
 
         self.maya_cmds = cmds.help("[a-z]*", list=True, lng="Python")
@@ -769,6 +822,82 @@ class EditorDialogCore(QDialog):
 
         completer = QCompleter(self.maya_cmds)
         self.search_help.setCompleter(completer)
+
+    def create_lint_panel(self) -> None:
+        """Create the lint results panel and add it to the output splitter.
+
+        The panel is hidden by default and can be shown via the *Show Lint*
+        checkbox in :class:`OutputToolBar`.
+        """
+        self.lint_panel = QTableWidget(0, 4)
+        self.lint_panel.setHorizontalHeaderLabels(["Sev", "Line", "Code", "Message"])
+        self.lint_panel.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.ResizeMode.Stretch
+        )
+        self.lint_panel.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.lint_panel.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.lint_panel.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.lint_panel.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.lint_panel.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.lint_panel.verticalHeader().setVisible(False)
+        self.lint_panel.setAlternatingRowColors(True)
+        self.lint_panel.cellDoubleClicked.connect(self._lint_row_activated)
+        self.lint_panel.setVisible(False)
+        self.output_splitter.addWidget(self.lint_panel)
+
+    @Slot(list)
+    def update_lint_panel(self, diagnostics: list) -> None:
+        """Populate the lint panel with *diagnostics*.
+
+        Parameters
+        ----------
+        diagnostics : list[Diagnostic]
+            Diagnostics from the active Python editor.
+        """
+        self.lint_panel.setRowCount(0)
+        for diag in diagnostics:
+            row = self.lint_panel.rowCount()
+            self.lint_panel.insertRow(row)
+
+            sev_item = QTableWidgetItem(diag.severity[0].upper())  # "E" or "W"
+            sev_item.setForeground(
+                QColor(255, 80, 80) if diag.severity == "error" else QColor(255, 200, 0)
+            )
+            self.lint_panel.setItem(row, 0, sev_item)
+
+            line_item = QTableWidgetItem(f"{diag.row}:{diag.col}")
+            line_item.setData(Qt.UserRole, diag.row)
+            self.lint_panel.setItem(row, 1, line_item)
+
+            self.lint_panel.setItem(row, 2, QTableWidgetItem(diag.code))
+            self.lint_panel.setItem(row, 3, QTableWidgetItem(diag.message))
+
+    @Slot(int, int)
+    def _lint_row_activated(self, row: int, _col: int) -> None:
+        """Jump the active editor to the line referenced by the clicked row.
+
+        Parameters
+        ----------
+        row : int
+            The row index in the lint panel.
+        _col : int
+            Unused column index.
+        """
+        line_item = self.lint_panel.item(row, 1)
+        if line_item is None:
+            return
+        line_number = line_item.data(Qt.UserRole)
+        if line_number is None:
+            return
+        editor = self.ui.editor_tab.currentWidget()
+        if editor and hasattr(editor, "goto_line"):
+            editor.goto_line(int(line_number) - 1)
 
     @Slot(int)
     def run_maya_help(self, index: int) -> None:
@@ -808,6 +937,36 @@ class EditorDialogCore(QDialog):
         editor.draw_line.connect(self.output_window.append_line)
         self.update_fonts.connect(editor.set_editor_fonts)
         self.toggle_line_numbers.connect(editor.toggle_line_number)
+        # Wire lint results to the lint panel for Python editors
+        if isinstance(editor, PythonTextEdit):
+            editor.lint_results_changed.connect(self._on_editor_lint_results)
+
+    @Slot(int)
+    def _on_active_tab_changed(self, _index: int) -> None:
+        """Clear the lint panel when switching tabs.
+
+        The panel will be repopulated once the newly active editor's linter
+        fires (or immediately if the editor already has cached results).
+        """
+        self.lint_panel.setRowCount(0)
+        editor = self.ui.editor_tab.currentWidget()
+        if isinstance(editor, PythonTextEdit) and editor._diagnostics:
+            self.update_lint_panel(editor._diagnostics)
+
+    @Slot(list)
+    def _on_editor_lint_results(self, diagnostics: list) -> None:
+        """Update the lint panel only when the signal comes from the active tab.
+
+        Parameters
+        ----------
+        diagnostics : list[Diagnostic]
+            Diagnostics from the editor that emitted ``lint_results_changed``.
+        """
+        # sender() returns the PythonTextEdit that emitted the signal
+        sending_editor = self.sender()
+        active_editor = self.ui.editor_tab.currentWidget()
+        if sending_editor is active_editor:
+            self.update_lint_panel(diagnostics)
 
     @Slot(int)
     def change_active_model(self, index: int) -> None:

@@ -19,15 +19,21 @@ from collections import namedtuple
 from typing import Any, Dict, List, Optional
 
 from maya import utils
-from PySide6.QtCore import QEvent, QObject, Qt, Signal
-from PySide6.QtWidgets import QCompleter, QFileDialog
+from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
+from PySide6.QtWidgets import QCompleter, QFileDialog, QToolTip
 
 from .PythonHighlighter import PythonHighlighter
+from .RuffLinter import Diagnostic, RuffLinter
 from .TextEdit import TextEdit
 
 is_class: bool = False
 code_model_data = namedtuple("code_model_data", "type line_number name")  # noqa: PYI024
 class_model_data = namedtuple("class_model_data", "name line_number")  # noqa: PYI024
+
+# Underline colours for diagnostics
+_COLOUR_ERROR = QColor(255, 80, 80, 220)    # red
+_COLOUR_WARNING = QColor(255, 200, 0, 200)  # amber
 
 
 class PythonTextEdit(TextEdit):
@@ -37,10 +43,17 @@ class PythonTextEdit(TextEdit):
     -------
     code_model_changed : Signal()
         Emitted when the code model (class/function list) is regenerated.
+    lint_results_changed : Signal(list)
+        Emitted with a list of :class:`~RuffLinter.Diagnostic` whenever a lint
+        run completes.  Connect this to a lint-results panel.
     """
 
     completer = QCompleter()
     code_model_changed = Signal()
+    lint_results_changed = Signal(list)  # List[Diagnostic]
+
+    # Debounce interval in milliseconds before triggering a lint run
+    _LINT_DEBOUNCE_MS: int = 500
 
     def __init__(
         self,
@@ -78,6 +91,26 @@ class PythonTextEdit(TextEdit):
         self.copyAvailable.connect(self.selection_changed)
         self.code_model: List[Any] = []
         self.generate_code_model()
+
+        # --- Ruff linting setup ---
+        self._diagnostics: List[Diagnostic] = []
+        self._linter = RuffLinter(parent=self)
+        self._linter.diagnostics_ready.connect(self._apply_diagnostics)
+
+        self._lint_timer = QTimer(self)
+        self._lint_timer.setSingleShot(True)
+        self._lint_timer.setInterval(self._LINT_DEBOUNCE_MS)
+        self._lint_timer.timeout.connect(self._run_linter)
+
+        # Trigger debounce on every document change
+        self.document().contentsChanged.connect(self._lint_timer.start)
+
+        # Enable mouse-tracking so we can show tooltips on hover
+        self.setMouseTracking(True)
+
+    # ------------------------------------------------------------------
+    # Event handling
+    # ------------------------------------------------------------------
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         """Filter key events for Python editor shortcuts.
@@ -119,7 +152,8 @@ class PythonTextEdit(TextEdit):
     def event(self, event: QEvent) -> bool:
         """Process events passed directly to the editor.
 
-        Handles tooltip events (currently disabled but reserved).
+        Intercepts :class:`QEvent.ToolTip` to display lint diagnostic messages
+        when the mouse hovers over an underlined region.
 
         Parameters
         ----------
@@ -132,8 +166,20 @@ class PythonTextEdit(TextEdit):
             True if the event was handled.
         """
         if event.type() == QEvent.ToolTip:
+            help_event = event
+            pos: QPoint = help_event.pos()
+            cursor = self.cursorForPosition(pos)
+            tip = self._tooltip_at_cursor(cursor)
+            if tip:
+                QToolTip.showText(help_event.globalPos(), tip, self)
+            else:
+                QToolTip.hideText()
             return True
         return TextEdit.event(self, event)
+
+    # ------------------------------------------------------------------
+    # Execution
+    # ------------------------------------------------------------------
 
     def execute_code(self) -> None:
         """Execute the Python code in the editor.
@@ -175,10 +221,15 @@ class PythonTextEdit(TextEdit):
         """
         self.execute_selected = state
 
+    # ------------------------------------------------------------------
+    # File I/O
+    # ------------------------------------------------------------------
+
     def save_file(self) -> bool:
         """Save the current editor content.
 
         If the filename is ``untitled.py`` a save dialog is shown.
+        Also triggers a lint run on save.
 
         Returns
         -------
@@ -199,7 +250,13 @@ class PythonTextEdit(TextEdit):
                 code_file.write(self.toPlainText())
             self.needs_saving = False
             self.generate_code_model()
+            # Run linter immediately on save (bypass the debounce timer)
+            self._run_linter()
         return True
+
+    # ------------------------------------------------------------------
+    # Code model
+    # ------------------------------------------------------------------
 
     def extract_classes_and_functions(
         self, node_to_traverse: Any, current_object: List[Any]
@@ -238,6 +295,112 @@ class PythonTextEdit(TextEdit):
         """Parse the document with AST and rebuild the code model."""
         document = self.document().toRawText()
         document = document.replace("\u2029", "\n")
-        node_to_traverse = ast.parse(document)
+        try:
+            node_to_traverse = ast.parse(document)
+        except SyntaxError:
+            # Syntax errors are surfaced via ruff; silently skip AST rebuild
+            return
         self.extract_classes_and_functions(node_to_traverse, self.code_model)
         self.code_model_changed.emit()
+
+    # ------------------------------------------------------------------
+    # Linting
+    # ------------------------------------------------------------------
+
+    @Slot()
+    def _run_linter(self) -> None:
+        """Send the current document contents to the background linter."""
+        source = self.document().toRawText().replace("\u2029", "\n")
+        filename = self.filename or "untitled.py"
+        self._linter.lint(source, filename)
+
+    @Slot(list)
+    def _apply_diagnostics(self, diagnostics: List[Diagnostic]) -> None:
+        """Receive lint results and render underlines in the editor.
+
+        Builds a list of :class:`QTextEdit.ExtraSelection` objects — one per
+        diagnostic — with a wavy underline whose colour indicates severity:
+
+        * **Red** — errors (ruff E/F prefixes)
+        * **Amber** — warnings (all other rules)
+
+        Parameters
+        ----------
+        diagnostics : list[Diagnostic]
+            The diagnostics returned by the linter.
+        """
+        self._diagnostics = diagnostics
+        selections = []
+        doc = self.document()
+
+        for diag in diagnostics:
+            # ruff uses 1-based line/column; QTextDocument uses 0-based blocks
+            block = doc.findBlockByLineNumber(diag.row - 1)
+            if not block.isValid():
+                continue
+
+            start_pos = block.position() + max(0, diag.col - 1)
+
+            # Try to use end_location for a precise range; fall back to
+            # highlighting the rest of the line so there is always something
+            # visible.
+            end_block = doc.findBlockByLineNumber(diag.end_row - 1)
+            if end_block.isValid() and (diag.end_row > diag.row or diag.end_col > diag.col):
+                end_pos = end_block.position() + max(0, diag.end_col - 1)
+            else:
+                end_pos = block.position() + block.length() - 1
+
+            if end_pos <= start_pos:
+                end_pos = start_pos + 1
+
+            cursor = QTextCursor(doc)
+            cursor.setPosition(start_pos)
+            cursor.setPosition(end_pos, QTextCursor.KeepAnchor)
+
+            fmt = QTextCharFormat()
+            colour = _COLOUR_ERROR if diag.severity == "error" else _COLOUR_WARNING
+            fmt.setUnderlineColor(colour)
+            fmt.setUnderlineStyle(QTextCharFormat.WaveUnderline)
+            # Store tooltip text in the format so it is accessible on hover
+            fmt.setToolTip(f"{diag.code}: {diag.message}")
+
+            sel = self.ExtraSelection()
+            sel.cursor = cursor
+            sel.format = fmt
+            selections.append(sel)
+
+        self.setExtraSelections(selections)
+        # Notify listeners (e.g. the lint panel in EditorDialog)
+        self.lint_results_changed.emit(diagnostics)
+
+    def _tooltip_at_cursor(self, cursor: QTextCursor) -> str:
+        """Return the lint message(s) at *cursor*, or an empty string.
+
+        Checks every extra selection to see whether *cursor*'s position falls
+        within its range and collects the associated tool-tip texts.
+
+        Parameters
+        ----------
+        cursor : QTextCursor
+            Cursor positioned at the mouse hover location.
+
+        Returns
+        -------
+        str
+            Newline-separated diagnostic messages, or ``""`` if none.
+        """
+        pos = cursor.position()
+        messages = []
+        for sel in self.extraSelections():
+            start = sel.cursor.selectionStart()
+            end = sel.cursor.selectionEnd()
+            if start <= pos <= end:
+                tip = sel.format.toolTip()
+                if tip:
+                    messages.append(tip)
+        return "\n".join(messages)
+
+    def closeEvent(self, event: Any) -> None:  # type: ignore[override]
+        """Stop the linter thread when the editor is closed."""
+        self._linter.stop()
+        super().closeEvent(event)

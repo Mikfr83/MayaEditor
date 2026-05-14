@@ -75,6 +75,12 @@ class OutputToolBar(QToolBar):
         show_help.toggled.connect(self.show_help)
         self.addWidget(show_help)
 
+        show_lint = QCheckBox("Show Lint")
+        show_lint.setCheckable(True)
+        show_lint.setChecked(False)
+        show_lint.toggled.connect(self.show_lint)
+        self.addWidget(show_lint)
+
         open_web_help = QPushButton("Online Help")
         open_web_help.clicked.connect(lambda x: cmds.help(doc=True))
         self.addWidget(open_web_help)
@@ -90,6 +96,18 @@ class OutputToolBar(QToolBar):
         """
         if self.parent:
             self.parent.help_frame.setVisible(state)
+
+    @Slot(bool)
+    def show_lint(self, state: bool) -> None:
+        """Toggle the lint panel visibility.
+
+        Parameters
+        ----------
+        state : bool
+            True to show, False to hide.
+        """
+        if self.parent and hasattr(self.parent, "lint_panel"):
+            self.parent.lint_panel.setVisible(state)
 
     @Slot(int)
     def update_output_level(self, index: int) -> None:
