@@ -114,6 +114,7 @@ class EditorDialogCore(QDialog):
             self.message_callback, ""
         )
         self.settings = QSettings("NCCA", "NCCA_Maya_Editor")
+        self.file_system_root: str = QDir.currentPath()
         self.root_path: str = cmds.moduleInfo(path=True, moduleName="MayaEditor")
         self.python_icon = QIcon(":/icons/python.png")
         self.mel_icon = QIcon(":/icons/mel.png")
@@ -179,6 +180,12 @@ class EditorDialogCore(QDialog):
                 self.load_workspace_to_editor(workspace)
         except Exception:
             pass
+        try:
+            root = self.settings.value("file_system_root")
+            if root:
+                self.file_system_root = str(root)
+        except Exception:
+            pass
 
         self.settings.beginGroup("Font")
         try:
@@ -202,6 +209,7 @@ class EditorDialogCore(QDialog):
         )
         self.settings.setValue("size", self.size())
         self.settings.setValue("workspace", self.workspace.file_name)
+        self.settings.setValue("file_system_root", self.file_system_root)
         self.settings.beginGroup("Font")
         self.settings.setValue("font-name", self.font.family())
         self.settings.setValue("font-size", self.font.pointSize())
@@ -328,6 +336,10 @@ class EditorDialogCore(QDialog):
         settings_menu.addAction(change_font_action)
         change_font_action.triggered.connect(self.change_font)
 
+        set_root_action = QAction("Set Workspace Root...", self)
+        settings_menu.addAction(set_root_action)
+        set_root_action.triggered.connect(self.set_workspace_root)
+
         show_line_numbers_action = QAction("Show Line Numbers", self)
         settings_menu.addAction(show_line_numbers_action)
         show_line_numbers_action.toggled.connect(self.show_line_numbers)
@@ -356,6 +368,19 @@ class EditorDialogCore(QDialog):
 
         self.menu_bar.addMenu(settings_menu)
         self.ui.main_grid_layout.setMenuBar(self.menu_bar)
+
+    def set_workspace_root(self) -> None:
+        """Open a directory dialog to set the file-system sidebar root."""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Workspace Root", self.file_system_root
+        )
+        if directory:
+            self.file_system_root = directory
+            self.sidebar_models.file_system_model.setRootPath(directory)
+            if self.ui.sidebar_selector.currentIndex() == 1:
+                self.ui.sidebar_treeview.setRootIndex(
+                    self.sidebar_models.file_system_model.index(directory)
+                )
 
     def open_file(self) -> None:
         """Show a file-open dialog and load the selected file into a new tab."""
@@ -439,15 +464,19 @@ class EditorDialogCore(QDialog):
         self.create_live_editors()
 
     def save_workspace(self) -> None:
-        """Save the current workspace via a file dialog."""
-        file_name, _ = QFileDialog.getSaveFileName(
-            self,
-            "Select Workspace Name",
-            "untitled.workspace",
-            "Workspace (*.workspace)",
-        )
-        if file_name:
-            self.workspace.save(file_name)
+        """Save the current workspace, prompting for a location only when new."""
+        if self.workspace.file_name:
+            self.workspace.save(self.workspace.file_name)
+        else:
+            file_name, _ = QFileDialog.getSaveFileName(
+                self,
+                "Select Workspace Name",
+                "untitled.workspace",
+                "Workspace (*.workspace)",
+            )
+            if file_name:
+                self.workspace.file_name = file_name
+                self.workspace.save(file_name)
 
     def close_workspace(self) -> None:
         """Close the current workspace and reset the editor."""
@@ -753,7 +782,7 @@ class EditorDialogCore(QDialog):
             self.ui.sidebar_treeview.setModel(self.sidebar_models.file_system_model)
             self.ui.sidebar_treeview.setHeaderHidden(False)
             self.ui.sidebar_treeview.setRootIndex(
-                self.sidebar_models.file_system_model.index(QDir.currentPath())
+                self.sidebar_models.file_system_model.index(self.file_system_root)
             )
         elif index == 2:
             self.ui.sidebar_treeview.setModel(self.sidebar_models.code_system_model)
@@ -803,6 +832,12 @@ class EditorDialogStandalone(EditorDialogCore):
             workspace = self.settings.value("workspace")
             if workspace:
                 self.load_workspace_to_editor(workspace)
+        except Exception:
+            pass
+        try:
+            root = self.settings.value("file_system_root")
+            if root:
+                self.file_system_root = str(root)
         except Exception:
             pass
 
