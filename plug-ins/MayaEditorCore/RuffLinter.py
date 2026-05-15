@@ -138,10 +138,7 @@ class _RuffWorker(QObject):
                 _RuffWorker._ruff_missing_warned = True
                 # Emit empty list — caller will display a one-time warning via
                 # the diagnostics_ready signal carrying an empty list.
-                print(
-                    "[MayaEditor] ruff not found on PATH — linting disabled. "
-                    "Install ruff: pip install ruff"
-                )
+                print("[MayaEditor] ruff not found on PATH — linting disabled. Install ruff: pip install ruff")
             self.diagnostics_ready.emit([])
             return
         except subprocess.TimeoutExpired:
