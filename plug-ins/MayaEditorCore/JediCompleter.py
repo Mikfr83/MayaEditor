@@ -207,19 +207,39 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
             current_line = context_lines[line - 1]
             print(f"[Jedi] Analyzing: '{current_line}' at col {col}")
 
-        # Try using Interpreter for live runtime completions (better for Maya)
-        # Interpreter can access the actual runtime environment
+        # Execute the code up to the cursor to get real runtime context
+        # This allows Jedi to see actual imported modules
         try:
-            # Get all current globals/locals from main namespace
+            # Create a namespace and execute imports
+            namespace = {}
+
+            # Execute all lines before the current line to populate namespace
+            lines_before = context_lines[: line - 1]
+            code_before = "\n".join(lines_before)
+
+            if code_before.strip():
+                print(f"[Jedi] Executing {len(lines_before)} lines to build namespace...")
+                try:
+                    exec(code_before, namespace)
+                    imported_items = [k for k in namespace.keys() if not k.startswith("_")]
+                    print(f"[Jedi] Namespace has: {imported_items}")
+                except Exception as exec_error:
+                    print(f"[Jedi] Error executing code: {exec_error}")
+                    namespace = {}
+
+            # Add Maya's main namespace as well
             import __main__
 
-            namespaces = [__main__.__dict__]
+            combined_namespace = {**__main__.__dict__, **namespace}
 
-            print("[Jedi] Using Interpreter mode (runtime aware)")
-            interpreter = Interpreter(source, namespaces=namespaces, project=project)
+            print("[Jedi] Using Interpreter mode with executed namespace")
+            interpreter = Interpreter(source, namespaces=[combined_namespace], project=project)
             completions = interpreter.complete(line, col)
         except Exception as interp_error:
             print(f"[Jedi] Interpreter failed, falling back to Script: {interp_error}")
+            import traceback
+
+            traceback.print_exc()
             # Fallback to Script mode
             script = Script(source, path=filename, project=project)
             completions = script.complete(line, col)
@@ -231,16 +251,19 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
         for c in completions:
             nm = getattr(c, "name", None) or getattr(c, "complete", None)
             if isinstance(nm, str) and nm not in names:
+                # Filter out private/dunder unless explicitly typed
+                if nm.startswith("__") and not current_line.strip().endswith("__"):
+                    continue
                 names.append(nm)
             # Debug first few completions
-            if len(names) <= 3:
+            if len(names) <= 5:
                 comp_type = getattr(c, "type", "unknown")
                 print(f"[Jedi]   - {nm} (type: {comp_type})")
 
         if names:
-            print(f"[Jedi] Returned {len(names)} completions: {names[:5]}...")
+            print(f"[Jedi] Returned {len(names)} completions: {names[:10]}...")
         else:
-            print("[Jedi] WARNING: No completions found!")
+            print("[Jedi] WARNING: No useful completions found!")
 
         return names
     except Exception as e:
