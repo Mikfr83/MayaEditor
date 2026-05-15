@@ -103,8 +103,7 @@ class PythonTextEdit(TextEdit):
         # Use custom Jedi popup instead of QCompleter
         self._jedi_popup = JediCompletionPopup(self)
         self._jedi_popup.completion_selected.connect(self._insert_completion)
-        self._autocomplete_enabled = True  # Can be toggled via toolbar
-        print(f"[Autocomplete] Initialized, enabled={self._autocomplete_enabled}")
+        self._popup_enabled = True  # Can be toggled via toolbar to hide popup
         self.copyAvailable.connect(self.selection_changed)
         self.code_model: List[Any] = []
         self.generate_code_model()
@@ -185,6 +184,10 @@ class PythonTextEdit(TextEdit):
     # ------------------------------------------------------------------
     def _update_completions(self) -> None:
         """Query Jedi for completions at the current cursor and show custom popup."""
+        # Always get completions but only show popup if enabled
+        if not self._popup_enabled:
+            return
+
         try:
             cursor = self.textCursor()
             source = self.document().toPlainText()
@@ -194,18 +197,13 @@ class PythonTextEdit(TextEdit):
             # Get completions from Jedi
             completions = get_jedi_completions(source, line, col, self.filename or "")
 
-            print(f"[Autocomplete] Got {len(completions)} completions")
-
             # Show custom popup
             if completions:
                 self._jedi_popup.show_completions(self, completions)
             else:
                 self._jedi_popup.hide()
-        except Exception as e:
-            print(f"[Autocomplete] Error in _update_completions: {e}")
-            import traceback
-
-            traceback.print_exc()
+        except Exception:
+            pass
 
     def _insert_completion(self, text: str) -> None:
         """Insert a selected completion into the editor, replacing the current word."""
@@ -249,21 +247,16 @@ class PythonTextEdit(TextEdit):
         # Process the key normally
         super().keyPressEvent(event)
 
-        # Update completions after typing (only if enabled)
-        if self._autocomplete_enabled:
-            print(f"[Autocomplete] Enabled, processing key: {event.text()}")
-            try:
-                ch = event.text()
-                if ch and (ch.isalnum() or ch == "_" or ch == "."):
-                    self._update_completions()
-                elif ch in (" ", "(", ")", "[", "]", "{", "}", ",", ";"):
-                    # Hide popup on these characters
-                    self._jedi_popup.hide()
-            except Exception as e:
-                print(f"[Autocomplete] Error in keyPressEvent: {e}")
-                import traceback
-
-                traceback.print_exc()
+        # Update completions after typing
+        try:
+            ch = event.text()
+            if ch and (ch.isalnum() or ch == "_" or ch == "."):
+                self._update_completions()
+            elif ch in (" ", "(", ")", "[", "]", "{", "}", ",", ";"):
+                # Hide popup on these characters
+                self._jedi_popup.hide()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Execution

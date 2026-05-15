@@ -117,52 +117,36 @@ class OutputToolBar(QToolBar):
 
     @Slot(bool)
     def toggle_autocomplete(self, state: bool) -> None:
-        """Toggle autocomplete on/off for Python editors.
+        """Toggle autocomplete popup visibility.
 
         Parameters
         ----------
         state : bool
-            True to enable, False to disable.
+            True to show popup, False to hide.
         """
-        print(f"[Autocomplete] Toggle called with state={state}")
-        print(f"[Autocomplete] self.parent = {self.parent}")
+        # Simple: just find all editors and toggle their _popup_enabled flag
+        editors = []
 
-        if self.parent:
-            print(f"[Autocomplete] Has python_editor: {hasattr(self.parent, 'python_editor')}")
-            print(f"[Autocomplete] Has workspace: {hasattr(self.parent, 'workspace')}")
-
+        # Check main python_editor
         if self.parent and hasattr(self.parent, "python_editor"):
-            print(
-                f"[Autocomplete] python_editor has _autocomplete_enabled: {hasattr(self.parent.python_editor, '_autocomplete_enabled')}"
-            )
-            if hasattr(self.parent.python_editor, "_autocomplete_enabled"):
-                self.parent.python_editor._autocomplete_enabled = state
-                print(f"[Autocomplete] Set python_editor._autocomplete_enabled = {state}")
-                # Hide popup if disabling
-                if not state and hasattr(self.parent.python_editor, "_jedi_popup"):
-                    self.parent.python_editor._jedi_popup.hide()
-                    print("[Autocomplete] Hid popup on python_editor")
-        # Also toggle for all tabs if workspace exists
+            editors.append(self.parent.python_editor)
+
+        # Check workspace tabs
         if self.parent and hasattr(self.parent, "workspace"):
             workspace = self.parent.workspace
-            # Check if it's a tab widget with multiple editors
             if hasattr(workspace, "count") and hasattr(workspace, "widget"):
                 for i in range(workspace.count()):
-                    widget = workspace.widget(i)
-                    if hasattr(widget, "_autocomplete_enabled"):
-                        widget._autocomplete_enabled = state
-                        print(f"[Autocomplete] Set workspace widget {i}._autocomplete_enabled = {state}")
-                        # Hide popup if disabling
-                        if not state and hasattr(widget, "_jedi_popup"):
-                            widget._jedi_popup.hide()
-                            print(f"[Autocomplete] Hid popup on workspace widget {i}")
-            # Or if workspace itself is the editor
-            elif hasattr(workspace, "_autocomplete_enabled"):
-                workspace._autocomplete_enabled = state
-                print(f"[Autocomplete] Set workspace._autocomplete_enabled = {state}")
-                if not state and hasattr(workspace, "_jedi_popup"):
-                    workspace._jedi_popup.hide()
-                    print("[Autocomplete] Hid popup on workspace")
+                    editors.append(workspace.widget(i))
+            else:
+                editors.append(workspace)
+
+        # Toggle all editors
+        for editor in editors:
+            if hasattr(editor, "_popup_enabled"):
+                editor._popup_enabled = state
+            # Hide popup immediately if disabling
+            if not state and hasattr(editor, "_jedi_popup"):
+                editor._jedi_popup.hide()
 
     @Slot(int)
     def update_output_level(self, index: int) -> None:
