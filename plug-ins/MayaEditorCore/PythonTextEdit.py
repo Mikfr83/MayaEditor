@@ -1,25 +1,27 @@
+#!/usr/bin/env python3
 # Copyright (C) 2022  Jonathan Macey
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
-#  any later version.
+# any later version.
 #
-#  This program is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 #
-#  You should have received a copy of the GNU General Public License
-#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """Python editor widget extending TextEdit with highlighting, AST code model and execution."""
 
 import ast
 from collections import namedtuple
 from typing import Any, Dict, List, Optional
 
+import maya.cmds as cmds
 from maya import utils
-from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QEvent, QObject, QPoint, QStringListModel, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QCompleter, QFileDialog, QTextEdit, QToolTip
 
@@ -27,12 +29,21 @@ from .PythonHighlighter import PythonHighlighter
 from .RuffLinter import Diagnostic, RuffLinter
 from .TextEdit import TextEdit
 
+# Optional Jedi-based autocomplete support
+try:
+    from jedi import Script  # type: ignore
+
+    _JEDI_AVAILABLE = True
+except Exception:
+    Script = None  # type: ignore
+    _JEDI_AVAILABLE = False
+
 is_class: bool = False
 code_model_data = namedtuple("code_model_data", "type line_number name")  # noqa: PYI024
 class_model_data = namedtuple("class_model_data", "name line_number")  # noqa: PYI024
 
 # Underline colours for diagnostics
-_COLOUR_ERROR = QColor(255, 80, 80, 220)    # red
+_COLOUR_ERROR = QColor(255, 80, 80, 220)  # red
 _COLOUR_WARNING = QColor(255, 200, 0, 200)  # amber
 
 
@@ -88,6 +99,10 @@ class PythonTextEdit(TextEdit):
         self.installEventFilter(self)
         self.live: bool = live
         self.completer.setCaseSensitivity(Qt.CaseInsensitive)
+        if _JEDI_AVAILABLE:
+            self._completions_model = QStringListModel([], self)
+            self.completer.setModel(self._completions_model)
+            self.completer.activated[str].connect(self._insert_completion)
         self.copyAvailable.connect(self.selection_changed)
         self.code_model: List[Any] = []
         self.generate_code_model()
@@ -134,15 +149,11 @@ class PythonTextEdit(TextEdit):
         if isinstance(obj, PythonTextEdit) and event.type() == QEvent.KeyPress:
             key_event = event
             if (
-                key_event.key() == Qt.Key_Return
-                and key_event.modifiers() == Qt.ControlModifier
+                key_event.key() == Qt.Key_Return and key_event.modifiers() == Qt.ControlModifier
             ) or key_event.key() == Qt.Key_F5:
                 self.execute_code()
                 return True
-            elif (
-                key_event.key() == Qt.Key_S
-                and key_event.modifiers() == Qt.ControlModifier
-            ):
+            elif key_event.key() == Qt.Key_S and key_event.modifiers() == Qt.ControlModifier:
                 self.save_file()
                 return True
             else:
@@ -154,16 +165,6 @@ class PythonTextEdit(TextEdit):
 
         Intercepts :class:`QEvent.ToolTip` to display lint diagnostic messages
         when the mouse hovers over an underlined region.
-
-        Parameters
-        ----------
-        event : QEvent
-            The event to process.
-
-        Returns
-        -------
-        bool
-            True if the event was handled.
         """
         if event.type() == QEvent.ToolTip:
             help_event = event
@@ -176,6 +177,59 @@ class PythonTextEdit(TextEdit):
                 QToolTip.hideText()
             return True
         return TextEdit.event(self, event)
+
+    # ------------------------------------------------------------------
+    # Completion helpers (Jedi)
+    # ------------------------------------------------------------------
+    def _update_completions(self) -> None:
+        """Query Jedi for completions at the current cursor and update the popup."""
+        if not _JEDI_AVAILABLE or Script is None:
+            return
+        try:
+            source = self.document().toPlainText()
+            line = self.textCursor().blockNumber() + 1
+            col = self.textCursor().positionInBlock() + 1
+            script = Script(source, path=self.filename or "")
+            completions = script.complete(line, col)
+            names = []
+            for c in completions:
+                nm = getattr(c, "name", None) or getattr(c, "complete", None)
+                if isinstance(nm, str):
+                    if nm not in names:
+                        names.append(nm)
+        except Exception:
+            names = []
+        if names:
+            self._completions_model.setStringList(names)
+            self.completer.complete(self.cursorRect())
+        else:
+            try:
+                self.completer.popup().hide()
+            except Exception:
+                pass
+
+    def _insert_completion(self, text: str) -> None:
+        """Insert a selected completion into the editor, replacing the current word."""
+        cursor = self.textCursor()
+        doc = self.toPlainText()
+        pos = cursor.position()
+        i = pos - 1
+        while i >= 0 and (doc[i].isalnum() or doc[i] == "_"):
+            i -= 1
+        start = i + 1
+        end = pos
+        cursor.setPosition(start)
+        cursor.setPosition(end, QTextCursor.KeepAnchor)
+        cursor.removeSelectedText()
+        cursor.insertText(text)
+        cursor.setPosition(start + len(text))
+        self.setTextCursor(cursor)
+
+    def keyPressEvent(self, event) -> None:
+        super().keyPressEvent(event)
+        ch = event.text()
+        if ch and (ch.isalnum() or ch == "_" or ch == "."):
+            self._update_completions()
 
     # ------------------------------------------------------------------
     # Execution
@@ -212,13 +266,7 @@ class PythonTextEdit(TextEdit):
                 self.update_output.emit(value)
 
     def selection_changed(self, state: bool) -> None:
-        """Track whether text is selected for partial execution.
-
-        Parameters
-        ----------
-        state : bool
-            True if text is selected.
-        """
+        """Track whether text is selected for partial execution."""
         self.execute_selected = state
 
     # ------------------------------------------------------------------
@@ -230,16 +278,9 @@ class PythonTextEdit(TextEdit):
 
         If the filename is ``untitled.py`` a save dialog is shown.
         Also triggers a lint run on save.
-
-        Returns
-        -------
-        bool
-            True if saved, False if cancelled.
         """
         if self.filename == "untitled.py":
-            filename, _ = QFileDialog.getSaveFileName(
-                self, "Save As", "", "Python (*.py)"
-            )
+            filename, _ = QFileDialog.getSaveFileName(self, "Save As", "", "Python (*.py)")
             if not filename:
                 return False
             self.filename = filename
@@ -258,25 +299,13 @@ class PythonTextEdit(TextEdit):
     # Code model
     # ------------------------------------------------------------------
 
-    def extract_classes_and_functions(
-        self, node_to_traverse: Any, current_object: List[Any]
-    ) -> None:
-        """Recursively extract class and function definitions from the AST.
-
-        Parameters
-        ----------
-        node_to_traverse : ast.AST
-            The AST node to traverse. Must have a ``body`` attribute.
-        current_object : list
-            The list to populate with code model entries.
-        """
+    def extract_classes_and_functions(self, node_to_traverse: Any, current_object: List[Any]) -> None:
+        """Recursively extract class and function definitions from the AST."""
         global is_class
         for node in node_to_traverse.body:
             if isinstance(node, ast.ClassDef):
                 is_class = True
-                cls_entry: Dict[Any, List[Any]] = {
-                    class_model_data(node.name, node.lineno): []
-                }
+                cls_entry: Dict[Any, List[Any]] = {class_model_data(node.name, node.lineno): []}
                 current_object.append(cls_entry)
                 self.extract_classes_and_functions(
                     node,
@@ -287,9 +316,7 @@ class PythonTextEdit(TextEdit):
                 func = "function"
                 if is_class:
                     func = "method"
-                current_object.append(
-                    code_model_data(type=func, line_number=node.lineno, name=node.name)
-                )
+                current_object.append(code_model_data(type=func, line_number=node.lineno, name=node.name))
 
     def generate_code_model(self) -> None:
         """Parse the document with AST and rebuild the code model."""
@@ -300,6 +327,7 @@ class PythonTextEdit(TextEdit):
         except SyntaxError:
             # Syntax errors are surfaced via ruff; silently skip AST rebuild
             return
+        self.code_model = []  # reset
         self.extract_classes_and_functions(node_to_traverse, self.code_model)
         self.code_model_changed.emit()
 
@@ -316,34 +344,18 @@ class PythonTextEdit(TextEdit):
 
     @Slot(list)
     def _apply_diagnostics(self, diagnostics: List[Diagnostic]) -> None:
-        """Receive lint results and render underlines in the editor.
-
-        Builds a list of :class:`QTextEdit.ExtraSelection` objects — one per
-        diagnostic — with a wavy underline whose colour indicates severity:
-
-        * **Red** — errors (ruff E/F prefixes)
-        * **Amber** — warnings (all other rules)
-
-        Parameters
-        ----------
-        diagnostics : list[Diagnostic]
-            The diagnostics returned by the linter.
-        """
+        """Receive lint results and render underlines in the editor."""
         self._diagnostics = diagnostics
         selections = []
         doc = self.document()
 
         for diag in diagnostics:
-            # ruff uses 1-based line/column; QTextDocument uses 0-based blocks
             block = doc.findBlockByLineNumber(diag.row - 1)
             if not block.isValid():
                 continue
 
             start_pos = block.position() + max(0, diag.col - 1)
 
-            # Try to use end_location for a precise range; fall back to
-            # highlighting the rest of the line so there is always something
-            # visible.
             end_block = doc.findBlockByLineNumber(diag.end_row - 1)
             if end_block.isValid() and (diag.end_row > diag.row or diag.end_col > diag.col):
                 end_pos = end_block.position() + max(0, diag.end_col - 1)
@@ -361,7 +373,6 @@ class PythonTextEdit(TextEdit):
             colour = _COLOUR_ERROR if diag.severity == "error" else _COLOUR_WARNING
             fmt.setUnderlineColor(colour)
             fmt.setUnderlineStyle(QTextCharFormat.WaveUnderline)
-            # Store tooltip text in the format so it is accessible on hover
             fmt.setToolTip(f"{diag.code}: {diag.message}")
 
             sel = QTextEdit.ExtraSelection()
@@ -370,25 +381,9 @@ class PythonTextEdit(TextEdit):
             selections.append(sel)
 
         self.setExtraSelections(selections)
-        # Notify listeners (e.g. the lint panel in EditorDialog)
         self.lint_results_changed.emit(diagnostics)
 
     def _tooltip_at_cursor(self, cursor: QTextCursor) -> str:
-        """Return the lint message(s) at *cursor*, or an empty string.
-
-        Checks every extra selection to see whether *cursor*'s position falls
-        within its range and collects the associated tool-tip texts.
-
-        Parameters
-        ----------
-        cursor : QTextCursor
-            Cursor positioned at the mouse hover location.
-
-        Returns
-        -------
-        str
-            Newline-separated diagnostic messages, or ``""`` if none.
-        """
         pos = cursor.position()
         messages = []
         for sel in self.extraSelections():
