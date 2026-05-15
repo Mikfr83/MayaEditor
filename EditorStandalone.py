@@ -145,9 +145,7 @@ class MainWindow(QMainWindow):
             msg_box.setWindowTitle("Warning!")
             msg_box.setText("Maya Scene Not Saved")
             msg_box.setInformativeText("Do you want to save your changes?")
-            msg_box.setStandardButtons(
-                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
-            )
+            msg_box.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
             msg_box.setDefaultButton(QMessageBox.Save)
             ret = msg_box.exec()
             if ret == QMessageBox.Save:
@@ -237,10 +235,16 @@ if __name__ == "__main__":
 
     root_path = cmds.moduleInfo(path=True, moduleName="MayaEditor")
     sys.path.insert(0, root_path + "/plug-ins")
+    import sys
+    import trace
+
     import MayaEditorCore
 
-    window = MainWindow()
-    window.resize(1024, 720)
-    window.show()
-    app.exec()
-    maya.standalone.uninitialize()
+    try:
+        window = MainWindow()
+        window.resize(1024, 720)
+        window.show()
+        app.exec()
+        maya.standalone.uninitialize()
+    except Exception:
+        traceback.print_exc()

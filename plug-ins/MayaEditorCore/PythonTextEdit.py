@@ -201,64 +201,81 @@ class PythonTextEdit(TextEdit):
     # ------------------------------------------------------------------
     def _update_completions(self) -> None:
         """Query Jedi for completions at the current cursor and update the popup."""
-        if not _JEDI_AVAILABLE or Script is None:
-            return
-
-        cursor = self.textCursor()
-
-        # Get the word under cursor as the completion prefix
-        doc = self.toPlainText()
-        pos = cursor.position()
-        i = pos - 1
-        while i >= 0 and (doc[i].isalnum() or doc[i] == "_"):
-            i -= 1
-        prefix = doc[i + 1 : pos]
-
         try:
-            source = self.document().toPlainText()
-            line = cursor.blockNumber() + 1
-            col = cursor.positionInBlock()
-            script = Script(source, path=self.filename or "")
-            completions = script.complete(line, col)
-            names = []
-            for c in completions:
-                nm = getattr(c, "name", None) or getattr(c, "complete", None)
-                if isinstance(nm, str):
-                    if nm not in names:
-                        names.append(nm)
-            print(f"[Jedi] Line {line}, Col {col}: Found {len(names)} completions: {names[:5]}... (prefix: '{prefix}')")
-        except Exception as e:
-            print(f"[Jedi] Error getting completions: {e}")
-            names = []
+            if not _JEDI_AVAILABLE or Script is None:
+                return
 
-        if names:
-            self._completions_model.setStringList(names)
-            self.completer.setCompletionPrefix(prefix)
+            cursor = self.textCursor()
 
-            # Get cursor rectangle in viewport coordinates
-            rect = self.cursorRect()
-            print(f"[Jedi] Showing popup at {rect} with prefix '{prefix}'")
+            # Get the word under cursor as the completion prefix
+            doc = self.toPlainText()
+            pos = cursor.position()
+            i = pos - 1
+            while i >= 0 and (doc[i].isalnum() or doc[i] == "_"):
+                i -= 1
+            prefix = doc[i + 1 : pos]
 
-            # Show the completion popup
-            self.completer.complete(rect)
-
-            # Ensure popup is visible and raised
-            popup = self.completer.popup()
-            if popup:
-                # Make sure it's on top and has focus
-                popup.show()
-                popup.raise_()
-                popup.setFocus()
-
-                # Debug info
-                print(f"[Jedi] Popup visibility: {popup.isVisible()}, items: {popup.model().rowCount()}")
-                print(f"[Jedi] Popup geometry: {popup.geometry()}")
-                print(f"[Jedi] Popup parent: {popup.parent()}")
-        else:
             try:
-                self.completer.popup().hide()
-            except Exception:
-                pass
+                source = self.document().toPlainText()
+                line = cursor.blockNumber() + 1
+                col = cursor.positionInBlock()
+                script = Script(source, path=self.filename or "")
+                completions = script.complete(line, col)
+                names = []
+                for c in completions:
+                    nm = getattr(c, "name", None) or getattr(c, "complete", None)
+                    if isinstance(nm, str):
+                        if nm not in names:
+                            names.append(nm)
+                print(
+                    f"[Jedi] Line {line}, Col {col}: Found {len(names)} completions: {names[:5]}... (prefix: '{prefix}')"
+                )
+            except Exception as e:
+                print(f"[Jedi] Error getting completions: {e}")
+                import traceback
+
+                traceback.print_exc()
+                names = []
+
+            if names:
+                try:
+                    self._completions_model.setStringList(names)
+                    self.completer.setCompletionPrefix(prefix)
+
+                    # Get cursor rectangle in viewport coordinates
+                    rect = self.cursorRect()
+                    print(f"[Jedi] Showing popup at {rect} with prefix '{prefix}'")
+
+                    # Show the completion popup
+                    self.completer.complete(rect)
+
+                    # Ensure popup is visible and raised
+                    popup = self.completer.popup()
+                    if popup:
+                        # Make sure it's on top and has focus
+                        popup.show()
+                        popup.raise_()
+                        popup.setFocus()
+
+                        # Debug info
+                        print(f"[Jedi] Popup visibility: {popup.isVisible()}, items: {popup.model().rowCount()}")
+                        print(f"[Jedi] Popup geometry: {popup.geometry()}")
+                        print(f"[Jedi] Popup parent: {popup.parent()}")
+                except Exception as e:
+                    print(f"[Jedi] Error showing popup: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+            else:
+                try:
+                    self.completer.popup().hide()
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[Jedi] Critical error in _update_completions: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     def _insert_completion(self, text: str) -> None:
         """Insert a selected completion into the editor, replacing the current word."""
@@ -290,24 +307,41 @@ class PythonTextEdit(TextEdit):
             traceback.print_exc()
 
     def keyPressEvent(self, event) -> None:
-        # Check if completer popup is visible and handle completion selection
-        if _JEDI_AVAILABLE:
-            popup = self.completer.popup()
-            if popup and popup.isVisible():
-                # Let these keys be handled by the completer
-                if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab, Qt.Key_Escape, Qt.Key_Backtab):
-                    event.ignore()
-                    return
+        try:
+            # Check if completer popup is visible and handle completion selection
+            if _JEDI_AVAILABLE:
+                try:
+                    popup = self.completer.popup()
+                    if popup and popup.isVisible():
+                        # Let these keys be handled by the completer
+                        if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab, Qt.Key_Escape, Qt.Key_Backtab):
+                            event.ignore()
+                            return
+                except Exception as e:
+                    print(f"[Jedi] Error checking popup visibility: {e}")
 
-        # Process the key normally first
-        super().keyPressEvent(event)
+            # Process the key normally first
+            super().keyPressEvent(event)
 
-        # Then update completions with a slight delay to avoid interference
-        if _JEDI_AVAILABLE:
-            ch = event.text()
-            if ch and (ch.isalnum() or ch == "_" or ch == "."):
-                # Use QTimer to defer completion update slightly
-                QTimer.singleShot(0, self._update_completions)
+            # Then update completions with a slight delay to avoid interference
+            if _JEDI_AVAILABLE:
+                try:
+                    ch = event.text()
+                    if ch and (ch.isalnum() or ch == "_" or ch == "."):
+                        # Use QTimer to defer completion update slightly
+                        QTimer.singleShot(0, self._update_completions)
+                except Exception as e:
+                    print(f"[Jedi] Error triggering completion update: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+        except Exception as e:
+            print(f"[Jedi] Critical error in keyPressEvent: {e}")
+            import traceback
+
+            traceback.print_exc()
+            # Still call super to ensure basic typing works
+            super().keyPressEvent(event)
 
     # ------------------------------------------------------------------
     # Execution
