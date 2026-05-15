@@ -1,18 +1,35 @@
 #!/usr/bin/env python3
 """Custom Jedi autocomplete popup for MayaEditor."""
 
+import sys
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QListWidget, QListWidgetItem
 
 try:
-    from jedi import Script  # type: ignore
+    from jedi import Project, Script  # type: ignore
 
     _JEDI_AVAILABLE = True
 except Exception:
     Script = None  # type: ignore
+    Project = None  # type: ignore
     _JEDI_AVAILABLE = False
+
+# Cache the Jedi project to avoid recreating it every time
+_jedi_project = None
+
+
+def _get_jedi_project():
+    """Get or create a Jedi project configured with Maya's sys.path."""
+    global _jedi_project
+    if _jedi_project is None and _JEDI_AVAILABLE and Project is not None:
+        # Create a project with Maya's current sys.path
+        # This allows Jedi to find Maya modules
+        _jedi_project = Project(path=".", added_sys_path=sys.path)
+        print(f"[Jedi] Created project with {len(sys.path)} sys.path entries")
+        print(f"[Jedi] Sample paths: {sys.path[:3]}")
+    return _jedi_project
 
 
 class JediCompletionPopup(QListWidget):
@@ -171,14 +188,27 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
         return []
 
     try:
-        script = Script(source, path=filename)
+        # Get the project configured with Maya's sys.path
+        project = _get_jedi_project()
+
+        # Create script with the project so Jedi can find Maya modules
+        script = Script(source, path=filename, project=project)
+
+        # Get completions
         completions = script.complete(line, col)
         names = []
         for c in completions:
             nm = getattr(c, "name", None) or getattr(c, "complete", None)
             if isinstance(nm, str) and nm not in names:
                 names.append(nm)
+
+        if names:
+            print(f"[Jedi] Returned {len(names)} completions: {names[:5]}...")
+
         return names
     except Exception as e:
         print(f"[Jedi] Error getting completions: {e}")
+        import traceback
+
+        traceback.print_exc()
         return []
