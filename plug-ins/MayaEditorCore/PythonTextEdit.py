@@ -251,6 +251,7 @@ class PythonTextEdit(TextEdit):
 
         # Update completions after typing (only if enabled)
         if self._autocomplete_enabled:
+            print(f"[Autocomplete] Enabled, processing key: {event.text()}")
             try:
                 ch = event.text()
                 if ch and (ch.isalnum() or ch == "_" or ch == "."):
