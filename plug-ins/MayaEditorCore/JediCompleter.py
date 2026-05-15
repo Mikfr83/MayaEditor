@@ -223,8 +223,25 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
                     exec(code_before, namespace)
                     imported_items = [k for k in namespace.keys() if not k.startswith("_")]
                     print(f"[Jedi] Namespace has: {imported_items}")
+
+                    # Debug: Check what cmds actually is
+                    if "cmds" in namespace:
+                        cmds_obj = namespace["cmds"]
+                        print(f"[Jedi] cmds type: {type(cmds_obj)}")
+                        print(f"[Jedi] cmds module: {getattr(cmds_obj, '__name__', 'unknown')}")
+                        # Try to get some attributes
+                        if hasattr(cmds_obj, "polyCube"):
+                            print(f"[Jedi] cmds.polyCube exists: {cmds_obj.polyCube}")
+                        else:
+                            print("[Jedi] WARNING: cmds.polyCube NOT found!")
+                        # Show first few attributes
+                        attrs = [a for a in dir(cmds_obj) if not a.startswith("_")][:10]
+                        print(f"[Jedi] cmds attributes: {attrs}")
                 except Exception as exec_error:
                     print(f"[Jedi] Error executing code: {exec_error}")
+                    import traceback
+
+                    traceback.print_exc()
                     namespace = {}
 
             # Add Maya's main namespace as well
@@ -232,9 +249,15 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
 
             combined_namespace = {**__main__.__dict__, **namespace}
 
+            print(f"[Jedi] Combined namespace has {len(combined_namespace)} items")
             print("[Jedi] Using Interpreter mode with executed namespace")
+
+            # Debug: What does Interpreter see?
             interpreter = Interpreter(source, namespaces=[combined_namespace], project=project)
+
+            print(f"[Jedi] Calling complete(line={line}, col={col})")
             completions = interpreter.complete(line, col)
+            print(f"[Jedi] Complete returned {len(completions)} items")
         except Exception as interp_error:
             print(f"[Jedi] Interpreter failed, falling back to Script: {interp_error}")
             import traceback
@@ -246,6 +269,8 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
 
         # Debug: show what Jedi found
         print(f"[Jedi] Jedi returned {len(completions)} raw completions")
+        if len(completions) > 0:
+            print(f"[Jedi] First completion: {completions[0].name if completions else 'none'}")
 
         names = []
         for c in completions:
@@ -264,6 +289,10 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
             print(f"[Jedi] Returned {len(names)} completions: {names[:10]}...")
         else:
             print("[Jedi] WARNING: No useful completions found!")
+            # Additional debug when no completions
+            print(f"[Jedi] Source length: {len(source)} chars")
+            print(f"[Jedi] Current line: '{current_line}'")
+            print(f"[Jedi] Line {line}, Col {col}")
 
         return names
     except Exception as e:
