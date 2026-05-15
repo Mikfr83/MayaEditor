@@ -284,12 +284,43 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
                     # If it's a module or has many attributes, use dir()
                     if hasattr(obj, "__name__") or len(dir(obj)) > 50:
                         print(f"[Jedi] Using dir() fallback for '{obj_name}'")
-                        direct_completions = [a for a in dir(obj) if not a.startswith("_")]
-                        print(f"[Jedi] dir() found {len(direct_completions)} attributes")
+
+                        # Get all attributes
+                        all_attrs = dir(obj)
+
+                        # Filter to callables (functions) and non-private
+                        callables = []
+                        non_callables = []
+                        for attr in all_attrs:
+                            if attr.startswith("_"):
+                                continue
+                            try:
+                                attr_obj = getattr(obj, attr)
+                                if callable(attr_obj):
+                                    callables.append(attr)
+                                else:
+                                    non_callables.append(attr)
+                            except:
+                                # If we can't get it, skip it
+                                pass
+
+                        print(f"[Jedi] dir() found {len(callables)} callables, {len(non_callables)} non-callables")
+
+                        # Prefer callables but include non-callables too
+                        direct_completions = callables + non_callables
+
+                        # If user has typed something after the dot, filter by prefix
+                        if len(parts) > 1 and parts[-1].strip():
+                            prefix = parts[-1].strip()
+                            print(f"[Jedi] Filtering {len(direct_completions)} items by prefix '{prefix}'")
+                            direct_completions = [c for c in direct_completions if c.startswith(prefix)]
+                            print(f"[Jedi] {len(direct_completions)} items match prefix")
+
                         if len(direct_completions) > len(completions):
                             print(
                                 f"[Jedi] Using dir() results instead of Jedi ({len(direct_completions)} vs {len(completions)})"
                             )
+                            print(f"[Jedi] First 10 completions: {direct_completions[:10]}")
                             return direct_completions
 
         names = []
