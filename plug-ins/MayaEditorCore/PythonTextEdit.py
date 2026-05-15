@@ -104,6 +104,21 @@ class PythonTextEdit(TextEdit):
             self._completions_model = QStringListModel([], self)
             self.completer.setModel(self._completions_model)
             self.completer.setWidget(self)  # Attach completer to this widget
+
+            # Configure the popup for better visibility
+            popup = self.completer.popup()
+            popup.setStyleSheet("""
+                QListView {
+                    background-color: #ffffff;
+                    color: #000000;
+                    border: 1px solid #888888;
+                    selection-background-color: #4a90d9;
+                    selection-color: #ffffff;
+                    font-size: 12px;
+                    min-width: 200px;
+                }
+            """)
+
             self.completer.activated[str].connect(self._insert_completion)
             print("[PythonTextEdit] Jedi autocomplete enabled")
         self.copyAvailable.connect(self.selection_changed)
@@ -219,14 +234,26 @@ class PythonTextEdit(TextEdit):
         if names:
             self._completions_model.setStringList(names)
             self.completer.setCompletionPrefix(prefix)
+
+            # Get cursor rectangle in viewport coordinates
             rect = self.cursorRect()
             print(f"[Jedi] Showing popup at {rect} with prefix '{prefix}'")
+
+            # Show the completion popup
             self.completer.complete(rect)
-            # Ensure popup is visible
+
+            # Ensure popup is visible and raised
             popup = self.completer.popup()
             if popup:
+                # Make sure it's on top and has focus
                 popup.show()
+                popup.raise_()
+                popup.setFocus()
+
+                # Debug info
                 print(f"[Jedi] Popup visibility: {popup.isVisible()}, items: {popup.model().rowCount()}")
+                print(f"[Jedi] Popup geometry: {popup.geometry()}")
+                print(f"[Jedi] Popup parent: {popup.parent()}")
         else:
             try:
                 self.completer.popup().hide()
@@ -236,42 +263,51 @@ class PythonTextEdit(TextEdit):
     def _insert_completion(self, text: str) -> None:
         """Insert a selected completion into the editor, replacing the current word."""
         print(f"[Jedi] Inserting completion: {text}")
-        cursor = self.textCursor()
-        doc = self.toPlainText()
-        pos = cursor.position()
 
-        # Find the start of the current word
-        i = pos - 1
-        while i >= 0 and (doc[i].isalnum() or doc[i] == "_"):
-            i -= 1
-        start = i + 1
-        end = pos
+        try:
+            # Use QTextCursor's selectWord functionality for safer word replacement
+            cursor = self.textCursor()
 
-        # Safety check to prevent out-of-range errors
-        doc_length = len(doc)
-        start = max(0, min(start, doc_length))
-        end = max(0, min(end, doc_length))
+            # Move to the end of the current word if not already there
+            cursor.movePosition(QTextCursor.EndOfWord)
 
-        cursor.setPosition(start)
-        cursor.setPosition(end, QTextCursor.KeepAnchor)
-        cursor.removeSelectedText()
-        cursor.insertText(text)
-        cursor.setPosition(start + len(text))
-        self.setTextCursor(cursor)
+            # Select the word under cursor
+            cursor.select(QTextCursor.WordUnderCursor)
+
+            # Get the selected text (the partial word)
+            partial_word = cursor.selectedText()
+            print(f"[Jedi] Replacing '{partial_word}' with '{text}'")
+
+            # Insert the completion
+            cursor.insertText(text)
+
+            # Update the text cursor
+            self.setTextCursor(cursor)
+        except Exception as e:
+            print(f"[Jedi] Error inserting completion: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     def keyPressEvent(self, event) -> None:
-        # Handle completion selection with Tab/Return
-        if self.completer.popup().isVisible():
-            if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab):
-                event.ignore()
-                return
+        # Check if completer popup is visible and handle completion selection
+        if _JEDI_AVAILABLE:
+            popup = self.completer.popup()
+            if popup and popup.isVisible():
+                # Let these keys be handled by the completer
+                if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab, Qt.Key_Escape, Qt.Key_Backtab):
+                    event.ignore()
+                    return
 
+        # Process the key normally first
         super().keyPressEvent(event)
 
-        # Update completions after typing
-        ch = event.text()
-        if _JEDI_AVAILABLE and ch and (ch.isalnum() or ch == "_" or ch == "."):
-            self._update_completions()
+        # Then update completions with a slight delay to avoid interference
+        if _JEDI_AVAILABLE:
+            ch = event.text()
+            if ch and (ch.isalnum() or ch == "_" or ch == "."):
+                # Use QTimer to defer completion update slightly
+                QTimer.singleShot(0, self._update_completions)
 
     # ------------------------------------------------------------------
     # Execution

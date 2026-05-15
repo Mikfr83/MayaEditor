@@ -1,0 +1,7 @@
+{
+    "files": ["EditorStandalone.py","plug-ins/MayaEditorCore/CustomUILoader.py","plug-ins/MayaEditorCore/HelpInspector.py" ,    "plug-ins/MayaEditorCore/OutputToolBar.py",     "plug-ins/MayaEditorCore/TextEdit.py",
+    "plug-ins/MayaEditorCore/EditorDialog.py","plug-ins/MayaEditorCore/LineNumberArea.py",   "plug-ins/MayaEditorCore/PythonCodeModel.py",   "plug-ins/MayaEditorCore/Workspace.py",
+    "plug-ins/MayaEditorCore/EditorIcons.py"   ,    "plug-ins/MayaEditorCore/MainUI.py",            "plug-ins/MayaEditorCore/PythonHighlighter.py", "plug-ins/MayaEditorCore/__init__.py",
+    "plug-ins/MayaEditorCore/EditorToolBar.py" ,    "plug-ins/MayaEditorCore/MelHighlighter.py",    "plug-ins/MayaEditorCore/PythonTextEdit.py",
+    "plug-ins/MayaEditorCore/FindDialog.py"    ,    "plug-ins/MayaEditorCore/MelTextEdit.py",       "plug-ins/MayaEditorCore/SidebarModels.py"]
+}

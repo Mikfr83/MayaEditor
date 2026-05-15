@@ -1,0 +1,15 @@
+{
+    "name": "",
+    "files": [
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/CustomUILoader.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/EditorDialog.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/PythonHighlighter.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/MelHighlighter.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/PythonTextEdit.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/MelTextEdit.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/Workspace.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditor.py",
+        "/Volumes/teaching/Code/MayaEditor/DebugEditor.py"
+    ],
+    "file_name": ""
+}

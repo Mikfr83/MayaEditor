@@ -1,0 +1,16 @@
+{
+    "name": "",
+    "files": [
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/CustomUILoader.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/EditorDialog.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/PythonHighlighter.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/MelHighlighter.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/PythonTextEdit.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/Workspace.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditor.py",
+        "/Volumes/teaching/Code/MayaEditor/DebugEditor.py",
+        "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/OutputToolBar.py",
+         "/Volumes/teaching/Code/MayaEditor/plug-ins/MayaEditorCore/OutputTextEdit.py",
+         "/Users/jmacey/teaching/CGITools/ScriptingCode/mel/createRock.mel"
+    ],
+}

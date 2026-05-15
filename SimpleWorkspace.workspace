@@ -1,0 +1,11 @@
+{
+    "name": "Simple",
+    "files": [
+         "/Users/jmacey/tmp/testclass.py",
+        "/Volumes/teaching/CGITools/ScriptingCode/mel/foreach.mel",
+        "/Volumes/teaching/CGITools/ScriptingCode/mel/eval.mel",
+        "/Volumes/teaching/CGITools/ScriptingCode/mel/proc1.mel",
+        "/Volumes/teaching/CGITools/ScriptingCode/mel/createRock.mel",
+        "/Volumes/teaching/CGITools/ScriptingCode/python/mayaExample1.py"
+    ]
+}
