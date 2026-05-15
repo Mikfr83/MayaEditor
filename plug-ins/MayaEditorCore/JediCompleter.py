@@ -272,6 +272,26 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
         if len(completions) > 0:
             print(f"[Jedi] First completion: {completions[0].name if completions else 'none'}")
 
+        # Fallback: If Jedi returns few/no completions but we're completing on a module,
+        # use dir() directly (better for dynamically generated modules like maya.cmds)
+        if len(completions) < 10 and "." in current_line:
+            # Check if we're completing on a known object
+            parts = current_line.split(".")
+            if len(parts) >= 2:
+                obj_name = parts[0].strip()
+                if obj_name in combined_namespace:
+                    obj = combined_namespace[obj_name]
+                    # If it's a module or has many attributes, use dir()
+                    if hasattr(obj, "__name__") or len(dir(obj)) > 50:
+                        print(f"[Jedi] Using dir() fallback for '{obj_name}'")
+                        direct_completions = [a for a in dir(obj) if not a.startswith("_")]
+                        print(f"[Jedi] dir() found {len(direct_completions)} attributes")
+                        if len(direct_completions) > len(completions):
+                            print(
+                                f"[Jedi] Using dir() results instead of Jedi ({len(direct_completions)} vs {len(completions)})"
+                            )
+                            return direct_completions
+
         names = []
         for c in completions:
             nm = getattr(c, "name", None) or getattr(c, "complete", None)

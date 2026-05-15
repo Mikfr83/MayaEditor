@@ -211,23 +211,33 @@ class PythonTextEdit(TextEdit):
         print(f"[Jedi] Inserting completion: {text}")
 
         try:
-            # Use QTextCursor's selectWord functionality for safer word replacement
             cursor = self.textCursor()
+            doc_text = self.toPlainText()
+            pos = cursor.position()
 
-            # Move to the end of the current word if not already there
-            cursor.movePosition(QTextCursor.EndOfWord)
+            # Find the start of the current word (alphanumeric or underscore)
+            start = pos
+            while (
+                start > 0
+                and start - 1 < len(doc_text)
+                and (doc_text[start - 1].isalnum() or doc_text[start - 1] == "_")
+            ):
+                start -= 1
 
-            # Select the word under cursor
-            cursor.select(QTextCursor.WordUnderCursor)
+            # Safety check
+            if start < 0 or start > len(doc_text) or pos < 0 or pos > len(doc_text):
+                print(f"[Jedi] Position out of bounds: start={start}, pos={pos}, len={len(doc_text)}")
+                return
 
-            # Get the selected text (the partial word)
-            partial_word = cursor.selectedText()
-            print(f"[Jedi] Replacing '{partial_word}' with '{text}'")
+            partial_word = doc_text[start:pos]
+            print(f"[Jedi] Replacing '{partial_word}' at pos {start}-{pos} with '{text}'")
 
-            # Insert the completion
+            # Select and replace
+            cursor.setPosition(start)
+            cursor.setPosition(pos, QTextCursor.KeepAnchor)
             cursor.insertText(text)
 
-            # Update the text cursor
+            # Move cursor to end of inserted text
             self.setTextCursor(cursor)
         except Exception as e:
             print(f"[Jedi] Error inserting completion: {e}")
