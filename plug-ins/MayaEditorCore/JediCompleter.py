@@ -8,12 +8,13 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QListWidget, QListWidgetItem
 
 try:
-    from jedi import Project, Script  # type: ignore
+    from jedi import Interpreter, Project, Script  # type: ignore
 
     _JEDI_AVAILABLE = True
 except Exception:
     Script = None  # type: ignore
     Project = None  # type: ignore
+    Interpreter = None  # type: ignore
     _JEDI_AVAILABLE = False
 
 # Cache the Jedi project to avoid recreating it every time
@@ -29,6 +30,15 @@ def _get_jedi_project():
         _jedi_project = Project(path=".", added_sys_path=sys.path)
         print(f"[Jedi] Created project with {len(sys.path)} sys.path entries")
         print(f"[Jedi] Sample paths: {sys.path[:3]}")
+
+        # Check if maya is actually in sys.path
+        maya_paths = [p for p in sys.path if "maya" in p.lower()]
+        if maya_paths:
+            print(f"[Jedi] Found {len(maya_paths)} Maya-related paths")
+            print(f"[Jedi] Maya paths: {maya_paths[:2]}")
+        else:
+            print("[Jedi] WARNING: No Maya paths found in sys.path!")
+
     return _jedi_project
 
 
@@ -191,19 +201,46 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
         # Get the project configured with Maya's sys.path
         project = _get_jedi_project()
 
-        # Create script with the project so Jedi can find Maya modules
-        script = Script(source, path=filename, project=project)
+        # Debug: show what we're analyzing
+        context_lines = source.split("\n")
+        if line - 1 < len(context_lines):
+            current_line = context_lines[line - 1]
+            print(f"[Jedi] Analyzing: '{current_line}' at col {col}")
 
-        # Get completions
-        completions = script.complete(line, col)
+        # Try using Interpreter for live runtime completions (better for Maya)
+        # Interpreter can access the actual runtime environment
+        try:
+            # Get all current globals/locals from main namespace
+            import __main__
+
+            namespaces = [__main__.__dict__]
+
+            print("[Jedi] Using Interpreter mode (runtime aware)")
+            interpreter = Interpreter(source, namespaces=namespaces, project=project)
+            completions = interpreter.complete(line, col)
+        except Exception as interp_error:
+            print(f"[Jedi] Interpreter failed, falling back to Script: {interp_error}")
+            # Fallback to Script mode
+            script = Script(source, path=filename, project=project)
+            completions = script.complete(line, col)
+
+        # Debug: show what Jedi found
+        print(f"[Jedi] Jedi returned {len(completions)} raw completions")
+
         names = []
         for c in completions:
             nm = getattr(c, "name", None) or getattr(c, "complete", None)
             if isinstance(nm, str) and nm not in names:
                 names.append(nm)
+            # Debug first few completions
+            if len(names) <= 3:
+                comp_type = getattr(c, "type", "unknown")
+                print(f"[Jedi]   - {nm} (type: {comp_type})")
 
         if names:
             print(f"[Jedi] Returned {len(names)} completions: {names[:5]}...")
+        else:
+            print("[Jedi] WARNING: No completions found!")
 
         return names
     except Exception as e:
