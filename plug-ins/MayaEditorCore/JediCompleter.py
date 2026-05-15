@@ -28,16 +28,6 @@ def _get_jedi_project():
         # Create a project with Maya's current sys.path
         # This allows Jedi to find Maya modules
         _jedi_project = Project(path=".", added_sys_path=sys.path)
-        print(f"[Jedi] Created project with {len(sys.path)} sys.path entries")
-        print(f"[Jedi] Sample paths: {sys.path[:3]}")
-
-        # Check if maya is actually in sys.path
-        maya_paths = [p for p in sys.path if "maya" in p.lower()]
-        if maya_paths:
-            print(f"[Jedi] Found {len(maya_paths)} Maya-related paths")
-            print(f"[Jedi] Maya paths: {maya_paths[:2]}")
-        else:
-            print("[Jedi] WARNING: No Maya paths found in sys.path!")
 
     return _jedi_project
 
@@ -93,8 +83,6 @@ class JediCompletionPopup(QListWidget):
         # Connect selection signal
         self.itemClicked.connect(self._on_item_clicked)
 
-        print("[JediCompletionPopup] Initialized")
-
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         """Handle item selection from the popup.
 
@@ -104,7 +92,6 @@ class JediCompletionPopup(QListWidget):
             The selected item
         """
         text = item.text()
-        print(f"[JediCompletionPopup] Item clicked: {text}")
         self.completion_selected.emit(text)
         self.hide()
 
@@ -144,8 +131,6 @@ class JediCompletionPopup(QListWidget):
         # Show it
         self.show()
         self.raise_()
-
-        print(f"[JediCompletionPopup] Showing {self.count()} items at {global_pos}")
 
     def keyPressEvent(self, event):
         """Handle key events in the popup.
@@ -201,11 +186,12 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
         # Get the project configured with Maya's sys.path
         project = _get_jedi_project()
 
-        # Debug: show what we're analyzing
+        # Get current line for context
         context_lines = source.split("\n")
         if line - 1 < len(context_lines):
             current_line = context_lines[line - 1]
-            print(f"[Jedi] Analyzing: '{current_line}' at col {col}")
+        else:
+            current_line = ""
 
         # Execute the code up to the cursor to get real runtime context
         # This allows Jedi to see actual imported modules
@@ -218,30 +204,10 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
             code_before = "\n".join(lines_before)
 
             if code_before.strip():
-                print(f"[Jedi] Executing {len(lines_before)} lines to build namespace...")
                 try:
                     exec(code_before, namespace)
-                    imported_items = [k for k in namespace.keys() if not k.startswith("_")]
-                    print(f"[Jedi] Namespace has: {imported_items}")
-
-                    # Debug: Check what cmds actually is
-                    if "cmds" in namespace:
-                        cmds_obj = namespace["cmds"]
-                        print(f"[Jedi] cmds type: {type(cmds_obj)}")
-                        print(f"[Jedi] cmds module: {getattr(cmds_obj, '__name__', 'unknown')}")
-                        # Try to get some attributes
-                        if hasattr(cmds_obj, "polyCube"):
-                            print(f"[Jedi] cmds.polyCube exists: {cmds_obj.polyCube}")
-                        else:
-                            print("[Jedi] WARNING: cmds.polyCube NOT found!")
-                        # Show first few attributes
-                        attrs = [a for a in dir(cmds_obj) if not a.startswith("_")][:10]
-                        print(f"[Jedi] cmds attributes: {attrs}")
-                except Exception as exec_error:
-                    print(f"[Jedi] Error executing code: {exec_error}")
-                    import traceback
-
-                    traceback.print_exc()
+                except Exception:
+                    # Silently fail - user code may have errors
                     namespace = {}
 
             # Add Maya's main namespace as well
@@ -249,32 +215,17 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
 
             combined_namespace = {**__main__.__dict__, **namespace}
 
-            print(f"[Jedi] Combined namespace has {len(combined_namespace)} items")
-            print("[Jedi] Using Interpreter mode with executed namespace")
-
-            # Debug: What does Interpreter see?
+            # Use Interpreter mode with executed namespace
             interpreter = Interpreter(source, namespaces=[combined_namespace], project=project)
-
-            print(f"[Jedi] Calling complete(line={line}, col={col})")
             completions = interpreter.complete(line, col)
-            print(f"[Jedi] Complete returned {len(completions)} items")
-        except Exception as interp_error:
-            print(f"[Jedi] Interpreter failed, falling back to Script: {interp_error}")
-            import traceback
-
-            traceback.print_exc()
+        except Exception:
             # Fallback to Script mode
             script = Script(source, path=filename, project=project)
             completions = script.complete(line, col)
 
-        # Debug: show what Jedi found
-        print(f"[Jedi] Jedi returned {len(completions)} raw completions")
-        if len(completions) > 0:
-            print(f"[Jedi] First completion: {completions[0].name if completions else 'none'}")
-
         # Fallback: If Jedi returns few/no completions but we're completing on a module,
         # use dir() directly (better for dynamically generated modules like maya.cmds)
-        if len(completions) < 10 and "." in current_line:
+        if len(completions) < 10 and current_line and "." in current_line:
             # Check if we're completing on a known object
             parts = current_line.split(".")
             if len(parts) >= 2:
@@ -283,8 +234,6 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
                     obj = combined_namespace[obj_name]
                     # If it's a module or has many attributes, use dir()
                     if hasattr(obj, "__name__") or len(dir(obj)) > 50:
-                        print(f"[Jedi] Using dir() fallback for '{obj_name}'")
-
                         # Get all attributes
                         all_attrs = dir(obj)
 
@@ -304,23 +253,15 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
                                 # If we can't get it, skip it
                                 pass
 
-                        print(f"[Jedi] dir() found {len(callables)} callables, {len(non_callables)} non-callables")
-
                         # Prefer callables but include non-callables too
                         direct_completions = callables + non_callables
 
                         # If user has typed something after the dot, filter by prefix
                         if len(parts) > 1 and parts[-1].strip():
                             prefix = parts[-1].strip()
-                            print(f"[Jedi] Filtering {len(direct_completions)} items by prefix '{prefix}'")
                             direct_completions = [c for c in direct_completions if c.startswith(prefix)]
-                            print(f"[Jedi] {len(direct_completions)} items match prefix")
 
                         if len(direct_completions) > len(completions):
-                            print(
-                                f"[Jedi] Using dir() results instead of Jedi ({len(direct_completions)} vs {len(completions)})"
-                            )
-                            print(f"[Jedi] First 10 completions: {direct_completions[:10]}")
                             return direct_completions
 
         names = []
@@ -328,27 +269,11 @@ def get_jedi_completions(source: str, line: int, col: int, filename: str = "") -
             nm = getattr(c, "name", None) or getattr(c, "complete", None)
             if isinstance(nm, str) and nm not in names:
                 # Filter out private/dunder unless explicitly typed
-                if nm.startswith("__") and not current_line.strip().endswith("__"):
+                if nm.startswith("__") and current_line and not current_line.strip().endswith("__"):
                     continue
                 names.append(nm)
-            # Debug first few completions
-            if len(names) <= 5:
-                comp_type = getattr(c, "type", "unknown")
-                print(f"[Jedi]   - {nm} (type: {comp_type})")
-
-        if names:
-            print(f"[Jedi] Returned {len(names)} completions: {names[:10]}...")
-        else:
-            print("[Jedi] WARNING: No useful completions found!")
-            # Additional debug when no completions
-            print(f"[Jedi] Source length: {len(source)} chars")
-            print(f"[Jedi] Current line: '{current_line}'")
-            print(f"[Jedi] Line {line}, Col {col}")
 
         return names
-    except Exception as e:
-        print(f"[Jedi] Error getting completions: {e}")
-        import traceback
-
-        traceback.print_exc()
+    except Exception:
+        # Silently fail
         return []

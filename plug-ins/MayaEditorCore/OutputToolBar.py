@@ -81,6 +81,12 @@ class OutputToolBar(QToolBar):
         show_lint.toggled.connect(self.show_lint)
         self.addWidget(show_lint)
 
+        autocomplete_toggle = QCheckBox("Autocomplete")
+        autocomplete_toggle.setCheckable(True)
+        autocomplete_toggle.setChecked(True)  # Enabled by default
+        autocomplete_toggle.toggled.connect(self.toggle_autocomplete)
+        self.addWidget(autocomplete_toggle)
+
         open_web_help = QPushButton("Online Help")
         open_web_help.clicked.connect(lambda x: cmds.help(doc=True))
         self.addWidget(open_web_help)
@@ -109,6 +115,25 @@ class OutputToolBar(QToolBar):
         if self.parent and hasattr(self.parent, "lint_panel"):
             self.parent.lint_panel.setVisible(state)
 
+    @Slot(bool)
+    def toggle_autocomplete(self, state: bool) -> None:
+        """Toggle autocomplete on/off for Python editors.
+
+        Parameters
+        ----------
+        state : bool
+            True to enable, False to disable.
+        """
+        if self.parent and hasattr(self.parent, "python_editor"):
+            if hasattr(self.parent.python_editor, "_autocomplete_enabled"):
+                self.parent.python_editor._autocomplete_enabled = state
+        # Also toggle for all tabs if workspace exists
+        if self.parent and hasattr(self.parent, "workspace"):
+            for i in range(self.parent.workspace.count()):
+                widget = self.parent.workspace.widget(i)
+                if hasattr(widget, "_autocomplete_enabled"):
+                    widget._autocomplete_enabled = state
+
     @Slot(int)
     def update_output_level(self, index: int) -> None:
         """Update the Maya command echo level.
@@ -129,9 +154,7 @@ class OutputToolBar(QToolBar):
 
     def save_to_file(self) -> None:
         """Save the output window content to a text file."""
-        file_name, _ = QFileDialog.getSaveFileName(
-            self, "Save Output Text", "untitled.txt", "Text (*.txt)"
-        )
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Output Text", "untitled.txt", "Text (*.txt)")
         if file_name:
             with open(file_name, "w") as output_file:
                 output_file.write(self.parent.output_window.toPlainText())
