@@ -102,7 +102,9 @@ class PythonTextEdit(TextEdit):
         if _JEDI_AVAILABLE:
             self._completions_model = QStringListModel([], self)
             self.completer.setModel(self._completions_model)
+            self.completer.setWidget(self)  # Attach completer to this widget
             self.completer.activated[str].connect(self._insert_completion)
+            print("[PythonTextEdit] Jedi autocomplete enabled")
         self.copyAvailable.connect(self.selection_changed)
         self.code_model: List[Any] = []
         self.generate_code_model()
@@ -188,7 +190,7 @@ class PythonTextEdit(TextEdit):
         try:
             source = self.document().toPlainText()
             line = self.textCursor().blockNumber() + 1
-            col = self.textCursor().positionInBlock() + 1
+            col = self.textCursor().positionInBlock()
             script = Script(source, path=self.filename or "")
             completions = script.complete(line, col)
             names = []
@@ -197,11 +199,15 @@ class PythonTextEdit(TextEdit):
                 if isinstance(nm, str):
                     if nm not in names:
                         names.append(nm)
-        except Exception:
+            print(f"[Jedi] Line {line}, Col {col}: Found {len(names)} completions: {names[:5]}...")
+        except Exception as e:
+            print(f"[Jedi] Error getting completions: {e}")
             names = []
         if names:
             self._completions_model.setStringList(names)
-            self.completer.complete(self.cursorRect())
+            rect = self.cursorRect()
+            print(f"[Jedi] Showing popup at {rect}")
+            self.completer.complete(rect)
         else:
             try:
                 self.completer.popup().hide()
@@ -210,14 +216,23 @@ class PythonTextEdit(TextEdit):
 
     def _insert_completion(self, text: str) -> None:
         """Insert a selected completion into the editor, replacing the current word."""
+        print(f"[Jedi] Inserting completion: {text}")
         cursor = self.textCursor()
         doc = self.toPlainText()
         pos = cursor.position()
+
+        # Find the start of the current word
         i = pos - 1
         while i >= 0 and (doc[i].isalnum() or doc[i] == "_"):
             i -= 1
         start = i + 1
         end = pos
+
+        # Safety check to prevent out-of-range errors
+        doc_length = len(doc)
+        start = max(0, min(start, doc_length))
+        end = max(0, min(end, doc_length))
+
         cursor.setPosition(start)
         cursor.setPosition(end, QTextCursor.KeepAnchor)
         cursor.removeSelectedText()
