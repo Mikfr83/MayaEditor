@@ -124,30 +124,29 @@ class OutputToolBar(QToolBar):
         state : bool
             True to show popup, False to hide.
         """
-        # Simple: just find all editors and toggle their _popup_enabled flag
+        # Find all PythonTextEdit instances by checking for _popup_enabled
+        from .PythonTextEdit import PythonTextEdit
+
         editors = []
 
-        # Check main python_editor
-        if self.parent and hasattr(self.parent, "python_editor"):
-            editors.append(self.parent.python_editor)
+        # Recursively find all PythonTextEdit widgets
+        def find_python_editors(widget):
+            if isinstance(widget, PythonTextEdit):
+                editors.append(widget)
+            # Check children
+            if hasattr(widget, "children"):
+                for child in widget.children():
+                    find_python_editors(child)
 
-        # Check workspace tabs
-        if self.parent and hasattr(self.parent, "workspace"):
-            workspace = self.parent.workspace
-            if hasattr(workspace, "count") and hasattr(workspace, "widget"):
-                for i in range(workspace.count()):
-                    editors.append(workspace.widget(i))
-            else:
-                editors.append(workspace)
+        if self.parent:
+            find_python_editors(self.parent)
 
         # Toggle all editors
-        print(f"[Toggle] Found {len(editors)} editors, setting popup to {state}")
+        print(f"[Toggle] Found {len(editors)} PythonTextEdit instances, setting popup to {state}")
         for editor in editors:
             if hasattr(editor, "_popup_enabled"):
                 editor._popup_enabled = state
                 print(f"[Toggle] Set editor._popup_enabled = {state}")
-            else:
-                print("[Toggle] Editor doesn't have _popup_enabled attribute")
             # Hide popup immediately if disabling
             if not state and hasattr(editor, "_jedi_popup"):
                 editor._jedi_popup.hide()

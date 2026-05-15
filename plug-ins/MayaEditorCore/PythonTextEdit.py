@@ -203,8 +203,10 @@ class PythonTextEdit(TextEdit):
 
             # Show custom popup
             if completions:
+                print(f"[PythonTextEdit] Showing {len(completions)} completions")
                 self._jedi_popup.show_completions(self, completions)
             else:
+                print("[PythonTextEdit] No completions, hiding")
                 self._jedi_popup.hide()
         except Exception:
             pass
