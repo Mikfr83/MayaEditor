@@ -141,12 +141,17 @@ class OutputToolBar(QToolBar):
                 editors.append(workspace)
 
         # Toggle all editors
+        print(f"[Toggle] Found {len(editors)} editors, setting popup to {state}")
         for editor in editors:
             if hasattr(editor, "_popup_enabled"):
                 editor._popup_enabled = state
+                print(f"[Toggle] Set editor._popup_enabled = {state}")
+            else:
+                print("[Toggle] Editor doesn't have _popup_enabled attribute")
             # Hide popup immediately if disabling
             if not state and hasattr(editor, "_jedi_popup"):
                 editor._jedi_popup.hide()
+                print("[Toggle] Hid popup")
 
     @Slot(int)
     def update_output_level(self, index: int) -> None:

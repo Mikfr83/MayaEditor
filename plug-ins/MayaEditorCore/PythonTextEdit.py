@@ -104,6 +104,7 @@ class PythonTextEdit(TextEdit):
         self._jedi_popup = JediCompletionPopup(self)
         self._jedi_popup.completion_selected.connect(self._insert_completion)
         self._popup_enabled = True  # Can be toggled via toolbar to hide popup
+        print(f"[PythonTextEdit] Initialized with _popup_enabled={self._popup_enabled}")
         self.copyAvailable.connect(self.selection_changed)
         self.code_model: List[Any] = []
         self.generate_code_model()
@@ -186,7 +187,10 @@ class PythonTextEdit(TextEdit):
         """Query Jedi for completions at the current cursor and show custom popup."""
         # Always get completions but only show popup if enabled
         if not self._popup_enabled:
+            print("[PythonTextEdit] Popup disabled, skipping")
             return
+
+        print(f"[PythonTextEdit] Getting completions, popup_enabled={self._popup_enabled}")
 
         try:
             cursor = self.textCursor()
