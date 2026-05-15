@@ -125,7 +125,16 @@ class OutputToolBar(QToolBar):
             True to enable, False to disable.
         """
         print(f"[Autocomplete] Toggle called with state={state}")
+        print(f"[Autocomplete] self.parent = {self.parent}")
+
+        if self.parent:
+            print(f"[Autocomplete] Has python_editor: {hasattr(self.parent, 'python_editor')}")
+            print(f"[Autocomplete] Has workspace: {hasattr(self.parent, 'workspace')}")
+
         if self.parent and hasattr(self.parent, "python_editor"):
+            print(
+                f"[Autocomplete] python_editor has _autocomplete_enabled: {hasattr(self.parent.python_editor, '_autocomplete_enabled')}"
+            )
             if hasattr(self.parent.python_editor, "_autocomplete_enabled"):
                 self.parent.python_editor._autocomplete_enabled = state
                 print(f"[Autocomplete] Set python_editor._autocomplete_enabled = {state}")
