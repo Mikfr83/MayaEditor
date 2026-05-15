@@ -38,19 +38,23 @@ class JediCompletionPopup(QListWidget):
         self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
         self.setFocusPolicy(Qt.NoFocus)
 
-        # Styling
+        # Dark mode styling
         self.setStyleSheet("""
             QListWidget {
-                background-color: #ffffff;
-                color: #000000;
-                border: 2px solid #4a90d9;
-                selection-background-color: #4a90d9;
+                background-color: #2b2b2b;
+                color: #d4d4d4;
+                border: 2px solid #007acc;
+                selection-background-color: #007acc;
                 selection-color: #ffffff;
                 font-size: 12px;
                 padding: 2px;
             }
             QListWidget::item {
                 padding: 4px 8px;
+                border-bottom: 1px solid #3c3c3c;
+            }
+            QListWidget::item:hover {
+                background-color: #3c3c3c;
             }
         """)
 
