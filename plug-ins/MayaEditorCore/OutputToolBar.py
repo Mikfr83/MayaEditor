@@ -127,12 +127,18 @@ class OutputToolBar(QToolBar):
         if self.parent and hasattr(self.parent, "python_editor"):
             if hasattr(self.parent.python_editor, "_autocomplete_enabled"):
                 self.parent.python_editor._autocomplete_enabled = state
+                # Hide popup if disabling
+                if not state and hasattr(self.parent.python_editor, "_jedi_popup"):
+                    self.parent.python_editor._jedi_popup.hide()
         # Also toggle for all tabs if workspace exists
         if self.parent and hasattr(self.parent, "workspace"):
             for i in range(self.parent.workspace.count()):
                 widget = self.parent.workspace.widget(i)
                 if hasattr(widget, "_autocomplete_enabled"):
                     widget._autocomplete_enabled = state
+                    # Hide popup if disabling
+                    if not state and hasattr(widget, "_jedi_popup"):
+                        widget._jedi_popup.hide()
 
     @Slot(int)
     def update_output_level(self, index: int) -> None:
