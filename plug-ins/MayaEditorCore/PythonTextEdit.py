@@ -99,6 +99,7 @@ class PythonTextEdit(TextEdit):
         self.installEventFilter(self)
         self.live: bool = live
         self.completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.completer.setCompletionMode(QCompleter.PopupCompletion)
         if _JEDI_AVAILABLE:
             self._completions_model = QStringListModel([], self)
             self.completer.setModel(self._completions_model)
@@ -187,10 +188,21 @@ class PythonTextEdit(TextEdit):
         """Query Jedi for completions at the current cursor and update the popup."""
         if not _JEDI_AVAILABLE or Script is None:
             return
+
+        cursor = self.textCursor()
+
+        # Get the word under cursor as the completion prefix
+        doc = self.toPlainText()
+        pos = cursor.position()
+        i = pos - 1
+        while i >= 0 and (doc[i].isalnum() or doc[i] == "_"):
+            i -= 1
+        prefix = doc[i + 1 : pos]
+
         try:
             source = self.document().toPlainText()
-            line = self.textCursor().blockNumber() + 1
-            col = self.textCursor().positionInBlock()
+            line = cursor.blockNumber() + 1
+            col = cursor.positionInBlock()
             script = Script(source, path=self.filename or "")
             completions = script.complete(line, col)
             names = []
@@ -199,15 +211,22 @@ class PythonTextEdit(TextEdit):
                 if isinstance(nm, str):
                     if nm not in names:
                         names.append(nm)
-            print(f"[Jedi] Line {line}, Col {col}: Found {len(names)} completions: {names[:5]}...")
+            print(f"[Jedi] Line {line}, Col {col}: Found {len(names)} completions: {names[:5]}... (prefix: '{prefix}')")
         except Exception as e:
             print(f"[Jedi] Error getting completions: {e}")
             names = []
+
         if names:
             self._completions_model.setStringList(names)
+            self.completer.setCompletionPrefix(prefix)
             rect = self.cursorRect()
-            print(f"[Jedi] Showing popup at {rect}")
+            print(f"[Jedi] Showing popup at {rect} with prefix '{prefix}'")
             self.completer.complete(rect)
+            # Ensure popup is visible
+            popup = self.completer.popup()
+            if popup:
+                popup.show()
+                print(f"[Jedi] Popup visibility: {popup.isVisible()}, items: {popup.model().rowCount()}")
         else:
             try:
                 self.completer.popup().hide()
@@ -241,9 +260,17 @@ class PythonTextEdit(TextEdit):
         self.setTextCursor(cursor)
 
     def keyPressEvent(self, event) -> None:
+        # Handle completion selection with Tab/Return
+        if self.completer.popup().isVisible():
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab):
+                event.ignore()
+                return
+
         super().keyPressEvent(event)
+
+        # Update completions after typing
         ch = event.text()
-        if ch and (ch.isalnum() or ch == "_" or ch == "."):
+        if _JEDI_AVAILABLE and ch and (ch.isalnum() or ch == "_" or ch == "."):
             self._update_completions()
 
     # ------------------------------------------------------------------
