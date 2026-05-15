@@ -104,6 +104,7 @@ class PythonTextEdit(TextEdit):
         self._jedi_popup = JediCompletionPopup(self)
         self._jedi_popup.completion_selected.connect(self._insert_completion)
         self._autocomplete_enabled = True  # Can be toggled via toolbar
+        print(f"[Autocomplete] Initialized, enabled={self._autocomplete_enabled}")
         self.copyAvailable.connect(self.selection_changed)
         self.code_model: List[Any] = []
         self.generate_code_model()
@@ -193,13 +194,18 @@ class PythonTextEdit(TextEdit):
             # Get completions from Jedi
             completions = get_jedi_completions(source, line, col, self.filename or "")
 
+            print(f"[Autocomplete] Got {len(completions)} completions")
+
             # Show custom popup
             if completions:
                 self._jedi_popup.show_completions(self, completions)
             else:
                 self._jedi_popup.hide()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[Autocomplete] Error in _update_completions: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     def _insert_completion(self, text: str) -> None:
         """Insert a selected completion into the editor, replacing the current word."""
@@ -252,8 +258,11 @@ class PythonTextEdit(TextEdit):
                 elif ch in (" ", "(", ")", "[", "]", "{", "}", ",", ";"):
                     # Hide popup on these characters
                     self._jedi_popup.hide()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[Autocomplete] Error in keyPressEvent: {e}")
+                import traceback
+
+                traceback.print_exc()
 
     # ------------------------------------------------------------------
     # Execution
