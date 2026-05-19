@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QLineEdit, QToolButton
+from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QLineEdit, QPushButton, QToolButton
 
 if TYPE_CHECKING:
     from .TextEdit import TextEdit
@@ -56,6 +56,15 @@ class FindDialog(QFrame):
         self.replace = QLineEdit()
         self.layout.addWidget(self.replace, 1, 0, 1, 2)
         self.replace.setToolTip("replace")
+        self.replace.returnPressed.connect(self._replace_pressed)
+
+        self.replace_button = QPushButton("Replace")
+        self.replace_button.clicked.connect(self._replace_pressed)
+        self.layout.addWidget(self.replace_button, 1, 3, 1, 1)
+
+        self.replace_all_button = QPushButton("Replace All")
+        self.replace_all_button.clicked.connect(self._replace_all_pressed)
+        self.layout.addWidget(self.replace_all_button, 1, 4, 1, 1)
 
         self.show()
         self.hide()
@@ -63,3 +72,9 @@ class FindDialog(QFrame):
     def return_pressed(self) -> None:
         """Trigger find_next on the parent editor when Return is pressed."""
         self.parent.find_next(self.text_search.text())
+
+    def _replace_pressed(self) -> None:
+        self.parent.replace_current(self.text_search.text(), self.replace.text())
+
+    def _replace_all_pressed(self) -> None:
+        self.parent.replace_all(self.text_search.text(), self.replace.text())

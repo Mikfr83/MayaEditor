@@ -30,6 +30,7 @@ from PySide6.QtGui import (
     QPen,
     QResizeEvent,
     QTextCursor,
+    QTextDocument,
     QTextFormat,
 )
 from PySide6.QtWidgets import (
@@ -575,3 +576,52 @@ class TextEdit(QPlainTextEdit):
         else:
             self.moveCursor(QTextCursor.Start)
             self.found_index = 1
+
+    def _find_flags(self) -> QTextDocument.FindFlag:
+        flags = QTextDocument.FindFlag(0)
+        if self.find_dialog and self.find_dialog.case_sensitive.isChecked():
+            flags |= QTextDocument.FindCaseSensitively
+        if self.find_dialog and self.find_dialog.whole_word.isChecked():
+            flags |= QTextDocument.FindWholeWords
+        return flags
+
+    @Slot(str, str)
+    def replace_current(self, search_text: str, replace_text: str) -> None:
+        """Replace the current match and move to the next.
+
+        Parameters
+        ----------
+        search_text : str
+            Text to search for.
+        replace_text : str
+            Text to replace with.
+        """
+        cursor = self.textCursor()
+        if cursor.hasSelection() and cursor.selectedText() == search_text:
+            cursor.insertText(replace_text)
+        self.find(search_text, self._find_flags())
+
+    @Slot(str, str)
+    def replace_all(self, search_text: str, replace_text: str) -> None:
+        """Replace all occurrences of search_text with replace_text.
+
+        Parameters
+        ----------
+        search_text : str
+            Text to search for.
+        replace_text : str
+            Text to replace with.
+        """
+        flags = self._find_flags()
+        cursor = QTextCursor(self.document())
+        cursor.beginEditBlock()
+        count = 0
+        while True:
+            cursor = self.document().find(search_text, cursor, flags)
+            if cursor.isNull():
+                break
+            cursor.insertText(replace_text)
+            count += 1
+        if self.find_dialog:
+            self.find_dialog.items_found.setText(f"Replaced {count} occurrences")
+
