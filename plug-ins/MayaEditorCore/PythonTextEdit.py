@@ -317,6 +317,7 @@ class PythonTextEdit(TextEdit):
                 code_file.write(self.toPlainText())
             self.needs_saving = False
             self.generate_code_model()
+            self._update_tab_title()
             # Run linter immediately on save (bypass the debounce timer)
             self._run_linter()
         return True

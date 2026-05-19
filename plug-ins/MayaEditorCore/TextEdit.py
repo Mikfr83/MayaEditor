@@ -18,6 +18,7 @@ This is the base class for all editor text edits, providing line numbers,
 find/replace, zoom, and common signal wiring.
 """
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 from PySide6.QtCore import QEvent, QObject, QRect, Qt, Signal, Slot
@@ -37,6 +38,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QInputDialog,
     QPlainTextEdit,
+    QTabWidget,
     QTextEdit,
 )
 
@@ -277,7 +279,15 @@ class TextEdit(QPlainTextEdit):
             with open(self.filename, "w") as code_file:
                 code_file.write(self.toPlainText())
             self.needs_saving = False
+            self._update_tab_title()
         return True
+
+    def _update_tab_title(self) -> None:
+        tab = QObject.parent(self)
+        if isinstance(tab, QTabWidget) and self.filename:
+            idx = tab.indexOf(self)
+            if idx >= 0:
+                tab.setTabText(idx, Path(self.filename).name)
 
     def show_find_dialog(self) -> None:
         """Toggle the visibility of the find dialog."""

@@ -201,6 +201,7 @@ class MelTextEdit(TextEdit):
                 code_file.write(self.toPlainText())
             self.needs_saving = False
             self.generate_code_model()
+            self._update_tab_title()
         return True
 
     def extract_mel_function(self, code: str) -> str:
