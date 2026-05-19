@@ -56,15 +56,11 @@ class Workspace:
         file : str
             Partial or full filename to remove.
         """
-        try:
-            for index, name in enumerate(self.files):
-                if file in name:
-                    print(f"{index} {name} {file}")
-                    del self.files[index]
-                    self.is_saved = False
-                    return
-        except ValueError:
-            print(f"file {file} not found in workspace")
+        for name in list(self.files):
+            if file in name:
+                self.files.remove(name)
+                self.is_saved = False
+                return
 
     def save(self, filename: str) -> None:
         """Save the workspace as a JSON file.
