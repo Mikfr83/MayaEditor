@@ -596,9 +596,9 @@ class TextEdit(QPlainTextEdit):
         replace_text : str
             Text to replace with.
         """
-        cursor = self.textCursor()
-        if cursor.hasSelection() and cursor.selectedText() == search_text:
-            cursor.insertText(replace_text)
+        tc = self.textCursor()
+        if tc.hasSelection() and tc.selectedText() == search_text:
+            tc.insertText(replace_text)
         self.find(search_text, self._find_flags())
 
     @Slot(str, str)
@@ -612,16 +612,18 @@ class TextEdit(QPlainTextEdit):
         replace_text : str
             Text to replace with.
         """
+        if not search_text:
+            return
         flags = self._find_flags()
-        cursor = QTextCursor(self.document())
-        cursor.beginEditBlock()
         count = 0
-        while True:
-            cursor = self.document().find(search_text, cursor, flags)
-            if cursor.isNull():
-                break
-            cursor.insertText(replace_text)
+        self.moveCursor(QTextCursor.Start)
+        while self.find(search_text, flags):
+            tc = self.textCursor()
+            tc.insertText(replace_text)
             count += 1
         if self.find_dialog:
-            self.find_dialog.items_found.setText(f"Replaced {count} occurrences")
+            if count:
+                self.find_dialog.items_found.setText(f"Replaced {count} occurrences")
+            else:
+                self.find_dialog.items_found.setText("no results found")
 

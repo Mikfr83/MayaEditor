@@ -325,7 +325,9 @@ class PythonTextEdit(TextEdit):
     # Code model
     # ------------------------------------------------------------------
 
-    def extract_classes_and_functions(self, node_to_traverse: Any, current_object: List[Any], inside_class: bool = False) -> None:
+    def extract_classes_and_functions(
+        self, node_to_traverse: Any, current_object: List[Any], inside_class: bool = False
+    ) -> None:
         """Recursively extract class and function definitions from the AST."""
         for node in node_to_traverse.body:
             if isinstance(node, ast.ClassDef):
