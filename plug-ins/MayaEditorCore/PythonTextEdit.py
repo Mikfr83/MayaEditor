@@ -39,7 +39,6 @@ except Exception:
     Script = None  # type: ignore
     _JEDI_AVAILABLE = False
 
-is_class: bool = False
 code_model_data = namedtuple("code_model_data", "type line_number name")  # noqa: PYI024
 class_model_data = namedtuple("class_model_data", "name line_number")  # noqa: PYI024
 
@@ -326,23 +325,19 @@ class PythonTextEdit(TextEdit):
     # Code model
     # ------------------------------------------------------------------
 
-    def extract_classes_and_functions(self, node_to_traverse: Any, current_object: List[Any]) -> None:
+    def extract_classes_and_functions(self, node_to_traverse: Any, current_object: List[Any], inside_class: bool = False) -> None:
         """Recursively extract class and function definitions from the AST."""
-        global is_class
         for node in node_to_traverse.body:
             if isinstance(node, ast.ClassDef):
-                is_class = True
                 cls_entry: Dict[Any, List[Any]] = {class_model_data(node.name, node.lineno): []}
                 current_object.append(cls_entry)
                 self.extract_classes_and_functions(
                     node,
                     cls_entry[class_model_data(node.name, node.lineno)],
+                    inside_class=True,
                 )
-                is_class = False
             if isinstance(node, ast.FunctionDef):
-                func = "function"
-                if is_class:
-                    func = "method"
+                func = "method" if inside_class else "function"
                 current_object.append(code_model_data(type=func, line_number=node.lineno, name=node.name))
 
     def generate_code_model(self) -> None:
