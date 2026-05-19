@@ -95,15 +95,11 @@ class MelTextEdit(TextEdit):
         if isinstance(obj, MelTextEdit) and event.type() == QEvent.KeyPress:
             key_event = event
             if (
-                key_event.key() == Qt.Key_Return
-                and key_event.modifiers() == Qt.ControlModifier
+                key_event.key() == Qt.Key_Return and key_event.modifiers() == Qt.ControlModifier
             ) or key_event.key() == Qt.Key_F5:
                 self.execute_code()
                 return True
-            elif (
-                key_event.key() == Qt.Key_S
-                and key_event.modifiers() == Qt.ControlModifier
-            ):
+            elif key_event.key() == Qt.Key_S and key_event.modifiers() == Qt.ControlModifier:
                 self.save_file()
                 return True
             else:
@@ -186,17 +182,15 @@ class MelTextEdit(TextEdit):
     def save_file(self) -> bool:
         """Save the current editor content.
 
-        If the filename is ``untitled.py`` a save dialog is shown.
+        If the filename is ``untitled.mel`` a save dialog is shown.
 
         Returns
         -------
         bool
             True if saved, False if cancelled.
         """
-        if self.filename == "untitled.py":
-            filename, _ = QFileDialog.getSaveFileName(
-                self, "Save As", "", "Python (*.py)"
-            )
+        if self.filename == "untitled.mel":
+            filename, _ = QFileDialog.getSaveFileName(self, "Save As", "", "Mel (*.mel)")
             if not filename:
                 return False
             self.filename = filename
@@ -238,15 +232,9 @@ class MelTextEdit(TextEdit):
             if "global" in text and "proc" in text:
                 function = self.extract_mel_function(text)
                 self.code_model.append(
-                    self.code_model_data(
-                        scope="global", line_number=line + 1, function_name=function
-                    )
+                    self.code_model_data(scope="global", line_number=line + 1, function_name=function)
                 )
             elif "proc" in text:
                 function = self.extract_mel_function(text)
-                self.code_model.append(
-                    self.code_model_data(
-                        scope="proc", line_number=line + 1, function_name=function
-                    )
-                )
+                self.code_model.append(self.code_model_data(scope="proc", line_number=line + 1, function_name=function))
         self.code_model_changed.emit()
