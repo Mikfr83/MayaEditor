@@ -335,9 +335,13 @@ class EditorDialogCore(QDialog):
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
 
-        new_action = QAction("&New", self)
-        new_action.triggered.connect(self.new_file)
-        file_menu.addAction(new_action)
+        new_python_action = QAction("&New Python File", self)
+        new_python_action.triggered.connect(self.new_python_file)
+        file_menu.addAction(new_python_action)
+
+        new_mel_action = QAction("New &MEL File", self)
+        new_mel_action.triggered.connect(self.new_mel_file)
+        file_menu.addAction(new_mel_action)
 
         workspace_menu = QMenu("&Workspace")
         new_workspace = QAction("New Workspace", self)
@@ -461,7 +465,7 @@ class EditorDialogCore(QDialog):
             self.create_editor_and_load_files(file_name)
             self.workspace.add_file(file_name)
 
-    def new_file(self) -> None:
+    def new_python_file(self) -> None:
         """Create a new untitled Python file tab."""
         editor = PythonTextEdit(
             code="",
@@ -475,6 +479,21 @@ class EditorDialogCore(QDialog):
             editor._linter.set_executable(self._ruff_executable)
         self.connect_editor_slots(editor)
         self.ui.editor_tab.insertTab(0, editor, "untitled.py")
+        self.ui.editor_tab.setCurrentIndex(0)
+        self.ui.editor_tab.widget(0).setFocus()
+
+    def new_mel_file(self) -> None:
+        """Create a new untitled MEL file tab."""
+        editor = MelTextEdit(
+            code="",
+            filename="untitled.mel",
+            read_only=False,
+            show_line_numbers=True,
+            live=False,
+            parent=self,
+        )
+        self.connect_editor_slots(editor)
+        self.ui.editor_tab.insertTab(0, editor, self.mel_icon, "untitled.mel")
         self.ui.editor_tab.setCurrentIndex(0)
         self.ui.editor_tab.widget(0).setFocus()
 
