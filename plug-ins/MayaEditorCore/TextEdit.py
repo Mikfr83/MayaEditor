@@ -283,11 +283,16 @@ class TextEdit(QPlainTextEdit):
         return True
 
     def _update_tab_title(self) -> None:
-        tab = QObject.parent(self)
-        if isinstance(tab, QTabWidget) and self.filename:
-            idx = tab.indexOf(self)
-            if idx >= 0:
-                tab.setTabText(idx, Path(self.filename).name)
+        if not self.filename:
+            return
+        p = QObject.parent(self)
+        while p is not None:
+            if isinstance(p, QTabWidget):
+                idx = p.indexOf(self)
+                if idx >= 0:
+                    p.setTabText(idx, Path(self.filename).name)
+                break
+            p = QObject.parent(p)
 
     def show_find_dialog(self) -> None:
         """Toggle the visibility of the find dialog."""
